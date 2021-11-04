@@ -1,6 +1,9 @@
 import numpy as np
 import subprocess
 import importlib
+import threading
+import concurrent.futures
+import time
 
 ###########################################################
 # Refactored Classes and functions that is believed usable.
@@ -47,7 +50,7 @@ class Transcode_setting(object):
                     else:
                         raise Exception("Impossible error in args.ndim.")
                 else:
-                    raise Exception("Options can only be strings or sweep parameters.")
+                    raise ValueError("Options can only be strings or sweep parameters.")
         return args
 
 
@@ -71,7 +74,7 @@ class sweep_param(object):
         self.stop = stop
         self.n = n
         if (mode != "list") & ((stop is None) | (n is None)):
-            raise Exception("Only for mode 'list' the stop and n can be empty.")
+            raise ValueError("Only for mode 'list' the stop and n can be empty.")
 
     def __call__(self):
         return sweep(self.mode, self.start, self.stop, self.n)
@@ -102,7 +105,7 @@ def sweep(mode, start, stop, n):
     elif mode == "list":
         values = np.array(start)
     else:
-        raise Exception("The sweep mode can only be 'add', 'lin', 'log' or 'list'.")
+        raise ValueError("The sweep mode can only be 'add', 'lin', 'log' or 'list'.")
     return values
 
 
@@ -115,7 +118,7 @@ def video_length_seconds(binaries, filename):
     elif type(binaries) == dict:
         ffprobepath = binaries["ffprobe"]
     else:
-        raise Exception("Passed binary can only be in format string or dictionary")
+        raise TypeError("Passed binary can only be in format string or dictionary")
 
     result = subprocess.run(
         [
@@ -143,7 +146,7 @@ def video_framerate(binaries, filename):
     elif type(binaries) == dict:
         ffprobepath = binaries["ffprobe"]
     else:
-        raise Exception("Passed binary can only be in format string or dictionary")
+        raise TypeError("Passed binary can only be in format string or dictionary")
 
     result = subprocess.run(
         [
@@ -175,6 +178,11 @@ def video_frames(binaries, filename):
 ###########################################################
 
 
+class File_parameter(object):
+    def __init__(self):
+        pass
+
+
 def transcode(binaries, videofiles, transcode_set, outputfiles):
     """ Transcode video samples in videofiles with transcode_set.
     TODO
@@ -188,12 +196,14 @@ def transcode(binaries, videofiles, transcode_set, outputfiles):
         print("duration:", video_length_seconds(binaries, videofiles))
         print("framerate:", video_framerate(binaries, videofiles))
         print("calculated framecount:", video_frames(binaries, videofiles))
-        mod.transcode_start(transcode_set.binary, videofiles, list(transcode_set()[0]), outputfiles, "ffprobe") #TODO iterate through transcode_set
+        process, fdr, fdw = mod.transcode_start(transcode_set.binary, videofiles, list(transcode_set()[0]), outputfiles, "ffprobe") #TODO iterate through transcode_set
+        transcodeWatchdog = threading.Thread(target=transcode_watchdog, args=(process, fdr, fdw, mod))
+        process.wait()
     else:
-        raise Exception("Only Transcode_setting object is passable.")
+        raise ValueError("Only Transcode_setting object is passable.")
 
 
-class transcode_status(object):
+class Transcode_status(object):
     def __init__(self, is_running, progress, frames_encoded, fps, speed, out_time, line):
         self.is_running = is_running
         self.progress = progress
@@ -204,5 +214,18 @@ class transcode_status(object):
         self.line = line
 
 
-def transcode_callback(is_running, progress, frames_encoded, fps, speed, out_time, line):
-    pass
+def transcode_watchdog(process, fdr, fdw, mod):
+    print("Monitor Thread starting.")
+    transcodeGetInfo = threading.Thread(target=mod.transcode_get_info, args=(process, fdr))
+    transcodeGetInfo.start()
+    process.wait()
+    time.sleep(0.1)
+    if transcodeGetInfo.isAlive():
+        try:
+            print("Unclean transcode_get_info function. Cleaning.")
+            mod.transcode_get_info_stop(fdw, fdr)
+        except AttributeError:
+            print("Not implemented external stop.\nWaiting for thread to timeout.")
+        finally:
+            transcodeGetInfo.join(timeout=2)
+            mod.transcode_clean(fdw, fdr)
