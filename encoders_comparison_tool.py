@@ -2,7 +2,7 @@ import numpy as np
 import subprocess
 import importlib
 import threading
-import concurrent.futures
+import concurrent.futures as cf
 import os
 import time
 
@@ -17,11 +17,11 @@ class Transcode_setting(object):
     """ Make an callable Transcode_setting object that returns numpy array with arguments.
     transcode_plugin    - String with the path or name of transcoder plugin.
     binary              - String with binray path or name to be executed.
-    options             - Numpy array with arguments for transcoder and 
+    options             - Numpy array with arguments for transcoder and
     concurrent          - Set how much paralel transcoding jobs to do. TODO
         values: -1 - number of processors
-                0  - only one job
-                n  - number of concurrent jobs
+                0  - only one job at a time
+                n  - number of concurrent jobs for this setting
     """
 
     def __init__(self, transcode_plugin, binary, options, concurrent=0):
@@ -197,12 +197,12 @@ def transcode(binaries, videofiles, transcode_set, outputfiles):
         print("duration:", video_length_seconds(binaries, videofiles))
         print("framerate:", video_framerate(binaries, videofiles))
         print("calculated framecount:", video_frames(binaries, videofiles))
-        process, fdr_open, fdr, fdw = mod.transcode_start(transcode_set.binary, videofiles, list(transcode_set()[0]), outputfiles, "ffprobe") #TODO iterate through transcode_set
-        transcodeWatchdog = threading.Thread(target=transcode_watchdog, args=(process, fdr_open, fdr, fdw, mod))
+        process, fdr, fdw = mod.transcode_start(transcode_set.binary, videofiles, list(transcode_set()[0]), outputfiles, "ffprobe")  # TODO iterate through transcode_set
+        transcodeWatchdog = threading.Thread(target=transcode_watchdog, args=(process, fdr, fdw, mod))
         transcodeWatchdog.start()
         process.wait()
     else:
-        raise ValueError("Only Transcode_setting object is passable.")
+        raise TypeError("Only Transcode_setting class object is passable.")
 
 
 class Transcode_status(object):
@@ -216,9 +216,9 @@ class Transcode_status(object):
         self.line = line
 
 
-def transcode_watchdog(process, fdr_open, fdr, fdw, mod):
+def transcode_watchdog(process, fdr, fdw, mod):
     print("Monitor Thread starting.")
-    transcodeGetInfo = threading.Thread(target=mod.transcode_get_info, args=(process, fdr_open))
+    transcodeGetInfo = threading.Thread(target=mod.transcode_get_info, args=(process, fdr))
     transcodeGetInfo.start()
     process.wait()
     time.sleep(0.1)
@@ -230,6 +230,6 @@ def transcode_watchdog(process, fdr_open, fdr, fdw, mod):
             print("Not implemented external stop.\nWaiting for thread to timeout.")
         finally:
             transcodeGetInfo.join(timeout=2)
-            mod.transcode_clean(fdr, fdw)
     else:
         print("transcodeGetInfo exited normally.")
+        mod.transcode_clean(fdr, fdw)
