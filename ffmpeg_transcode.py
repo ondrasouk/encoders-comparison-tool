@@ -5,7 +5,7 @@ import encoders_comparison_tool as enc
 
 
 def transcode_cmd(binpath, filename, args, outputfile, progress_p_w=4):
-    cmd = [binpath, "-i", filename, "-y", "-progress", str("pipe:" + str(progress_p_w))] + list(args) + [outputfile]
+    cmd = [binpath, "-i", filename, "-nostdin", "-progress", str("pipe:" + str(progress_p_w))] + list(args) + [outputfile]
     return cmd
 
 

@@ -31,7 +31,7 @@ inputfiles_list = ["1.mkv", "2.mkv", "3.mkv"]
 
 print(transcode_set[2]())
 print("encoding:\n")
-#enc.transcode(binaries, "t.mkv", transcode_set[2], "out.mkv")
+enc.transcode(binaries, "t.mkv", transcode_set[2], "out.mkv")
 # TODO Make possible to pass an File_parameter class object that works as list
 #      or as generator for many names. Eg. 1.mkv, 2.mkv,...
 #      For input files and output files.
