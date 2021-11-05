@@ -3,6 +3,7 @@ import subprocess
 import importlib
 import threading
 import concurrent.futures
+import os
 import time
 
 ###########################################################
@@ -196,8 +197,9 @@ def transcode(binaries, videofiles, transcode_set, outputfiles):
         print("duration:", video_length_seconds(binaries, videofiles))
         print("framerate:", video_framerate(binaries, videofiles))
         print("calculated framecount:", video_frames(binaries, videofiles))
-        process, fdr, fdw = mod.transcode_start(transcode_set.binary, videofiles, list(transcode_set()[0]), outputfiles, "ffprobe") #TODO iterate through transcode_set
-        transcodeWatchdog = threading.Thread(target=transcode_watchdog, args=(process, fdr, fdw, mod))
+        process, fdr_open, fdr, fdw = mod.transcode_start(transcode_set.binary, videofiles, list(transcode_set()[0]), outputfiles, "ffprobe") #TODO iterate through transcode_set
+        transcodeWatchdog = threading.Thread(target=transcode_watchdog, args=(process, fdr_open, fdr, fdw, mod))
+        transcodeWatchdog.start()
         process.wait()
     else:
         raise ValueError("Only Transcode_setting object is passable.")
@@ -214,18 +216,20 @@ class Transcode_status(object):
         self.line = line
 
 
-def transcode_watchdog(process, fdr, fdw, mod):
+def transcode_watchdog(process, fdr_open, fdr, fdw, mod):
     print("Monitor Thread starting.")
-    transcodeGetInfo = threading.Thread(target=mod.transcode_get_info, args=(process, fdr))
+    transcodeGetInfo = threading.Thread(target=mod.transcode_get_info, args=(process, fdr_open))
     transcodeGetInfo.start()
     process.wait()
     time.sleep(0.1)
     if transcodeGetInfo.isAlive():
         try:
             print("Unclean transcode_get_info function. Cleaning.")
-            mod.transcode_get_info_stop(fdw, fdr)
+            mod.transcode_get_info_stop(fdr, fdw)
         except AttributeError:
             print("Not implemented external stop.\nWaiting for thread to timeout.")
         finally:
             transcodeGetInfo.join(timeout=2)
-            mod.transcode_clean(fdw, fdr)
+            mod.transcode_clean(fdr, fdw)
+    else:
+        print("transcodeGetInfo exited normally.")
