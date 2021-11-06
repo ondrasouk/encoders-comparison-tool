@@ -16,22 +16,25 @@ options2 = np.array([["-c:v", "libx264"],
                     ["-preset", "ultrafast"],
                     ["-crf", enc.sweep_param("add", 20, 21, 1)],
                     ["-an"],
+                    ["-y"],
                     ["-sn"]], dtype=object)
 transcode_set = []
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options))
-transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "ffmpeg", options1))
+transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "ffmpeg", options1, concurrent=-1))
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "ffmpeg", options2))
 binaries = {
     "ffprobe": "/usr/bin/ffprobe"
     }
 fileprefix = ""
 filesuffix = ".mkv"
-inputfiles_gen = (fileprefix + (str(x) + filesuffix) for x in range(1, 10))
-inputfiles_list = ["1.mkv", "2.mkv", "3.mkv"]
+inputfiles_gen = (fileprefix + (str(x) + filesuffix) for x in range(1, 2))
+inputfiles_list = ["1.mkv", "2.mkv"]
+for f in inputfiles_list:
+    print(f)
 
 print(transcode_set[2]())
 print("encoding:\n")
-enc.transcode(binaries, "t.mkv", transcode_set[2], "out.mkv")
+enc.transcode(binaries, inputfiles_list, transcode_set[2], "out.mkv")
 # TODO Make possible to pass an File_parameter class object that works as list
 #      or as generator for many names. Eg. 1.mkv, 2.mkv,...
 #      For input files and output files.

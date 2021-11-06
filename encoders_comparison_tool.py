@@ -1,10 +1,11 @@
 import numpy as np
+import time
 import subprocess
 import importlib
 import threading
+import multiprocessing
 import concurrent.futures as cf
-import os
-import time
+
 
 ###########################################################
 # Refactored Classes and functions that is believed usable.
@@ -20,8 +21,7 @@ class Transcode_setting(object):
     options             - Numpy array with arguments for transcoder and
     concurrent          - Set how much paralel transcoding jobs to do. TODO
         values: -1 - number of processors
-                0  - only one job at a time
-                n  - number of concurrent jobs for this setting
+                n > 0  - number of concurrent jobs for this setting
     """
 
     def __init__(self, transcode_plugin, binary, options, concurrent=0):
@@ -193,16 +193,49 @@ def transcode(binaries, videofiles, transcode_set, outputfiles):
         spec = importlib.util.spec_from_file_location("mod", transcode_set.transcode_plugin)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        print("loaded succesfully")
-        print("duration:", video_length_seconds(binaries, videofiles))
-        print("framerate:", video_framerate(binaries, videofiles))
-        print("calculated framecount:", video_frames(binaries, videofiles))
+        print("Loaded succesfully!")
+        for inputfile in videofiles:
+            print(inputfile, "duration:", video_length_seconds(binaries, inputfile))
+            print(inputfile, "framerate:", video_framerate(binaries, inputfile))
+            print(inputfile, "calculated framecount:", video_frames(binaries, inputfile))
+
+        args_in = []
+        i = 0
+        for inputfile in videofiles:
+            for transcode_args in transcode_set():
+                i = i + 1
+                args_in.append((mod, transcode_set.binary, inputfile, list(transcode_args), str("out" + str(i) + ".mkv"), binaries["ffprobe"]))
+        print(args_in)
+        if transcode_set.concurrent == 0:
+            concurrency = 1
+        elif transcode_set.concurrent == -1:
+            concurrency = multiprocessing.cpu_count  # TODO maybe use len(os.sched_getaffinity(0))
+        else:
+            concurrency = transcode_set.concurrent
+            # TODO Do not use more than 61 threads under Windows (needed test for this)
+            # https://stackoverflow.com/questions/1006289/how-to-find-out-the-number-of-cpus-using-python
+        print(concurrency)
+        with cf.ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futures = tuple(pool.submit(transcode_job_wrap, *args) for args in tuple(args_in))
+        '''
         process, fdr, fdw = mod.transcode_start(transcode_set.binary, videofiles, list(transcode_set()[0]), outputfiles, "ffprobe")  # TODO iterate through transcode_set
         transcodeWatchdog = threading.Thread(target=transcode_watchdog, args=(process, fdr, fdw, mod))
         transcodeWatchdog.start()
         process.wait()
+        '''
     else:
         raise TypeError("Only Transcode_setting class object is passable.")
+
+
+def transcode_job_wrap(mod, binary, inputfile, transcode_opt, outputfile, ffprobepath):
+    print("job started")
+    process, fdr, fdw = mod.transcode_start(binary, inputfile, transcode_opt, outputfile, ffprobepath)
+    transcodeWatchdog = threading.Thread(target=transcode_watchdog, args=(process, fdr, fdw, mod))
+    transcodeWatchdog.start()
+    process.wait()
+    transcodeWatchdog.join()
+    if process.returncode() != 0:
+        raise subprocess.CalledProcessError("command: {}\n failed with returncode: {}".format("".join(process.cmd), process.returncode()))
 
 
 class Transcode_status(object):
