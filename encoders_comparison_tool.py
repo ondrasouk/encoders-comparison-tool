@@ -5,6 +5,7 @@ import importlib
 import threading
 import multiprocessing
 import concurrent.futures as cf
+import os
 
 
 ###########################################################
@@ -19,12 +20,11 @@ videofiles_duration = {}
 videofiles_framerate = {}
 
 
-
 class Transcode_setting(object):
     """ Make an callable Transcode_setting object that returns numpy array with arguments.
     transcode_plugin    - String with the path or name of transcoder plugin.
     binary              - String with binray path or name to be executed.
-    options             - Numpy array with arguments for transcoder and
+    options             - Numpy array with arguments for transcoder
     concurrent          - Set how much paralel transcoding jobs to do. TODO
         values: -1 - number of processors
                 n > 0  - number of concurrent jobs for this setting
@@ -200,7 +200,7 @@ class File_parameter(object):
         pass
 
 
-def transcode(binaries, videofiles, transcode_set, outputfiles):
+def transcode(binaries, videofiles, transcode_set, outputpath):
     """ Transcode video samples in videofiles with transcode_set.
     TODO
     """
@@ -215,12 +215,33 @@ def transcode(binaries, videofiles, transcode_set, outputfiles):
             print(inputfile, "framerate:", video_framerate(binaries, inputfile))
             print(inputfile, "calculated framecount:", video_frames(binaries, inputfile))
 
+        options_flat = []
+        for x in transcode_set.options:
+            for y in x:
+                options_flat.append(y)
+
+        param_name = []
+        param_value = []
+        for x in range(len(options_flat)):
+            if isinstance(options_flat[x], sweep_param):
+                if x == 0:
+                    param_name.append("")
+                else:
+                    param_name.append(options_flat[x-1])
+                param_value.append(x)
+
         args_in = []
         jobid = iter([x for x in range(99999)])
-        i = iter([x for x in range(1, 99999)])
         for inputfile in videofiles:
+            filebasename = os.path.splitext(os.path.basename(inputfile))[0]
             for transcode_args in transcode_set():
-                args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_args), str("out" + str(next(i)) + ".mkv"), binaries["ffprobe"]))
+                x = iter([x for x in range(99999)])
+                param = ""
+                for opt in param_name:
+                    param = param + opt + "-" + str(transcode_args[param_value[next(x)]])
+                outputfile = str(outputpath + filebasename + param + ".mkv")
+                print(outputfile)
+                args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_args), outputfile, binaries["ffprobe"]))
         print(args_in)
         global status
         if 'status' not in globals():
