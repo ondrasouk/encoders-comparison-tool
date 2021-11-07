@@ -21,7 +21,7 @@ options2 = np.array([["-c:v", "libx264"],
 transcode_set = []
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options))
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "ffmpeg", options1, concurrent=-1))
-transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "ffmpeg", options2))
+transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "ffmpeg", options2, concurrent=2))
 binaries = {
     "ffprobe": "/usr/bin/ffprobe"
     }

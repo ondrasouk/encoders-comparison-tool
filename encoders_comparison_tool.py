@@ -8,10 +8,16 @@ import concurrent.futures as cf
 
 
 ###########################################################
-# Refactored Classes and functions that is believed usable.
+# Refactored Classes and functions that is maybe finalized.
 ###########################################################
 
 # Everything for setting the parameters of video transcode
+
+# Videofiles properties. Key is filename.
+videofiles_frame_num = {}
+videofiles_duration = {}
+videofiles_framerate = {}
+
 
 
 class Transcode_setting(object):
@@ -121,24 +127,29 @@ def video_length_seconds(binaries, filename):
     else:
         raise TypeError("Passed binary can only be in format string or dictionary")
 
-    result = subprocess.run(
-        [
-            ffprobepath,
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            filename,
-        ],
-        capture_output=True,
-        text=True,
-    )
+    global videofiles_duration
     try:
-        return float(result.stdout)
-    except ValueError:
-        raise ValueError(result.stderr.rstrip("\n"))
+        duration = videofiles_duration[filename]
+        return duration
+    except KeyError:
+        result = subprocess.run(
+            [
+                ffprobepath,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                filename,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        try:
+            return float(result.stdout)
+        except ValueError:
+            raise ValueError(result.stderr.rstrip("\n"))
 
 
 def video_framerate(binaries, filename):
@@ -149,26 +160,31 @@ def video_framerate(binaries, filename):
     else:
         raise TypeError("Passed binary can only be in format string or dictionary")
 
-    result = subprocess.run(
-        [
-            ffprobepath,
-            "-v",
-            "error",
-            "-show_entries",
-            "stream=r_frame_rate",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            filename,
-        ],
-        capture_output=True,
-        text=True,
-    )
+    global videofiles_duration
     try:
-        framerate_str = str(result.stdout.split("\n")[0])
-        framerate = int(framerate_str.split("/")[0]) / int(framerate_str.split("/")[1])
+        framerate = videofiles_framerate[filename]
         return framerate
-    except ValueError:
-        raise ValueError(result.stderr.rstrip("\n"))
+    except KeyError:
+        result = subprocess.run(
+            [
+                ffprobepath,
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=r_frame_rate",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                filename,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        try:
+            framerate_str = str(result.stdout.split("\n")[0])
+            framerate = int(framerate_str.split("/")[0]) / int(framerate_str.split("/")[1])
+            return framerate
+        except ValueError:
+            raise ValueError(result.stderr.rstrip("\n"))
 
 
 def video_frames(binaries, filename):
@@ -189,71 +205,49 @@ def transcode(binaries, videofiles, transcode_set, outputfiles):
     TODO
     """
     if isinstance(transcode_set, Transcode_setting):
-        print("dynamically loading source file:", transcode_set.transcode_plugin)
+        print("Dynamically loading source file:", transcode_set.transcode_plugin)
         spec = importlib.util.spec_from_file_location("mod", transcode_set.transcode_plugin)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        print("Loaded succesfully!")
+        print("Module loaded succesfully!")
         for inputfile in videofiles:
             print(inputfile, "duration:", video_length_seconds(binaries, inputfile))
             print(inputfile, "framerate:", video_framerate(binaries, inputfile))
             print(inputfile, "calculated framecount:", video_frames(binaries, inputfile))
 
         args_in = []
-        i = 0
+        jobid = iter([x for x in range(1, 99999)])
+        i = iter([x for x in range(1, 99999)])
         for inputfile in videofiles:
             for transcode_args in transcode_set():
-                i = i + 1
-                args_in.append((mod, transcode_set.binary, inputfile, list(transcode_args), str("out" + str(i) + ".mkv"), binaries["ffprobe"]))
+                args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_args), str("out" + str(next(i)) + ".mkv"), binaries["ffprobe"]))
         print(args_in)
         if transcode_set.concurrent == 0:
             concurrency = 1
         elif transcode_set.concurrent == -1:
-            concurrency = multiprocessing.cpu_count  # TODO maybe use len(os.sched_getaffinity(0))
+            concurrency = multiprocessing.cpu_count()  # TODO maybe use len(os.sched_getaffinity(0))
         else:
             concurrency = transcode_set.concurrent
-            # TODO Do not use more than 61 threads under Windows (needed test for this)
+            # TODO Do not use more than 61 threads under Windows (needs test for this)
             # https://stackoverflow.com/questions/1006289/how-to-find-out-the-number-of-cpus-using-python
         print(concurrency)
-        with cf.ThreadPoolExecutor(max_workers=concurrency) as pool:
+
+        with cf.ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix='job') as pool:
             futures = tuple(pool.submit(transcode_job_wrap, *args) for args in tuple(args_in))
-        '''
-        process, fdr, fdw = mod.transcode_start(transcode_set.binary, videofiles, list(transcode_set()[0]), outputfiles, "ffprobe")  # TODO iterate through transcode_set
-        transcodeWatchdog = threading.Thread(target=transcode_watchdog, args=(process, fdr, fdw, mod))
-        transcodeWatchdog.start()
-        process.wait()
-        '''
+        print(futures[0])
+        print(futures[0].exception())
     else:
         raise TypeError("Only Transcode_setting class object is passable.")
 
 
-def transcode_job_wrap(mod, binary, inputfile, transcode_opt, outputfile, ffprobepath):
-    print("job started")
+def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile, ffprobepath):
+    print("job started.")
     process, fdr, fdw = mod.transcode_start(binary, inputfile, transcode_opt, outputfile, ffprobepath)
-    transcodeWatchdog = threading.Thread(target=transcode_watchdog, args=(process, fdr, fdw, mod))
-    transcodeWatchdog.start()
-    process.wait()
-    transcodeWatchdog.join()
-    if process.returncode() != 0:
-        raise subprocess.CalledProcessError("command: {}\n failed with returncode: {}".format("".join(process.cmd), process.returncode()))
-
-
-class Transcode_status(object):
-    def __init__(self, is_running, progress, frames_encoded, fps, speed, out_time, line):
-        self.is_running = is_running
-        self.progress = progress
-        self.frames_encoded = frames_encoded
-        self.fps = fps
-        self.speed = speed
-        self.out_time = out_time
-        self.line = line
-
-
-def transcode_watchdog(process, fdr, fdw, mod):
     print("Monitor Thread starting.")
-    transcodeGetInfo = threading.Thread(target=mod.transcode_get_info, args=(process, fdr))
+    transcodeGetInfo = threading.Thread(target=mod.transcode_get_info, args=(jobid, process, fdr))
     transcodeGetInfo.start()
     process.wait()
+    print("returncode:", process.returncode)
     time.sleep(0.1)
     if transcodeGetInfo.isAlive():
         try:
@@ -266,3 +260,23 @@ def transcode_watchdog(process, fdr, fdw, mod):
     else:
         print("transcodeGetInfo exited normally.")
         mod.transcode_clean(fdr, fdw)
+    if (process.returncode > 0):
+        raise ValueError("command: {}\n failed with returncode: {}\nProgram output:\n{}".format(" ".join(process.args), process.returncode, process.stderr.read()))
+    return process.returncode
+
+
+def transcode_callback(jobid, stat):
+    global status
+    if 'status' not in globals():
+        status = np.array([{}])
+    try:
+        status[jobid][stat[0]] = stat[1]
+        if stat[0] == "progress":
+            try:
+                for i in range(1, len(status)):
+                    print("job id", i, ":", "progress:", status[i]["progress_perc"], "%")
+            except KeyError:
+                pass
+    except IndexError:
+        print("adding status elem")
+        status = np.append(status, [{}])
