@@ -216,12 +216,18 @@ def transcode(binaries, videofiles, transcode_set, outputfiles):
             print(inputfile, "calculated framecount:", video_frames(binaries, inputfile))
 
         args_in = []
-        jobid = iter([x for x in range(1, 99999)])
+        jobid = iter([x for x in range(99999)])
         i = iter([x for x in range(1, 99999)])
         for inputfile in videofiles:
             for transcode_args in transcode_set():
                 args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_args), str("out" + str(next(i)) + ".mkv"), binaries["ffprobe"]))
         print(args_in)
+        global status
+        if 'status' not in globals():
+            status = np.array([{}])
+        not_started_job_status = {'frame': '298', 'fps': '0.00', 'total_size': '0', 'out_time': '00:00:00.000000', 'speed': '0.00x', 'progress': 'waiting', 'progress_perc': '0.00'}
+        for i in range(next(jobid)-1):
+            status = np.append(status, not_started_job_status.copy())
         if transcode_set.concurrent == 0:
             concurrency = 1
         elif transcode_set.concurrent == -1:
@@ -234,8 +240,10 @@ def transcode(binaries, videofiles, transcode_set, outputfiles):
 
         with cf.ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix='job') as pool:
             futures = tuple(pool.submit(transcode_job_wrap, *args) for args in tuple(args_in))
-        print(futures[0])
-        print(futures[0].exception())
+
+        jobid = iter([x for x in range(99999)])
+        for future in futures:
+            print("Exceptions on job:", next(jobid), ":", future.exception())
     else:
         raise TypeError("Only Transcode_setting class object is passable.")
 
@@ -266,17 +274,10 @@ def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
 
 
 def transcode_callback(jobid, stat):
-    global status
-    if 'status' not in globals():
-        status = np.array([{}])
-    try:
-        status[jobid][stat[0]] = stat[1]
-        if stat[0] == "progress":
-            try:
-                for i in range(1, len(status)):
-                    print("job id", i, ":", "progress:", status[i]["progress_perc"], "%")
-            except KeyError:
-                pass
-    except IndexError:
-        print("adding status elem")
-        status = np.append(status, [{}])
+    status[jobid][stat[0]] = stat[1]
+    if stat[0] == "progress":
+        try:
+            for i in range(len(status)):
+                print("job id", i, ":", "progress:", status[i]["progress_perc"], "%")
+        except KeyError:
+            pass
