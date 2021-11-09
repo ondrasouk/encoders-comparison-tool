@@ -132,3 +132,5 @@ dmypy.json
 *.mkv
 *.ini
 kate.*
+*.kate-swp
+*.sync-conflict-*
