@@ -12,12 +12,27 @@ import os
 # Refactored Classes and functions that is maybe finalized.
 ###########################################################
 
+# Colors in terminal
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
 # Everything for setting the parameters of video transcode
 
 # Videofiles properties. Key is filename.
 videofiles_frame_num = {}
 videofiles_duration = {}
 videofiles_framerate = {}
+pipes = []
 
 
 class Transcode_setting(object):
@@ -265,29 +280,38 @@ def transcode(binaries, videofiles, transcode_set, outputpath):
         jobid = iter([x for x in range(99999)])
         for future in futures:
             print("Exceptions on job:", next(jobid), ":", future.exception())
+        global pipes
+        for s in pipes:
+            print(s)
+        for i in range(len(status)):
+            print("job", i, ":", status[i]["progress_perc"], "%", end =" ")
+        print(" ")
     else:
         raise TypeError("Only Transcode_setting class object is passable.")
 
 
 def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile, ffprobepath):
-    print("job started.")
+    print("job", jobid, "started.")
     process, fdr, fdw = mod.transcode_start(binary, inputfile, transcode_opt, outputfile, ffprobepath)
+    global pipes
+    pipes.append(str("jobid:" + str(jobid) + "fdr:" + str(fdr) + "fdw:" + str(fdw)))
     print("Monitor Thread starting.")
     transcodeGetInfo = threading.Thread(target=mod.transcode_get_info, args=(jobid, process, fdr))
     transcodeGetInfo.start()
     process.wait()
-    print("returncode:", process.returncode)
-    time.sleep(0.1)
+    print(f"{jobid} returncode: {process.returncode}")
     if transcodeGetInfo.isAlive():
         try:
-            print("Unclean transcode_get_info function. Cleaning.")
-            mod.transcode_get_info_stop(fdr, fdw)
+            time.sleep(0.5)
+            if transcodeGetInfo.isAlive():
+                print(f"{bcolors.FAIL}Hanged transcode_get_info on {jobid}. Cleaning.{bcolors.ENDC}")
+                mod.transcode_get_info_stop(fdr, fdw)
         except AttributeError:
-            print("Not implemented external stop.\nWaiting for thread to timeout.")
+            print(f"{bcolors.WARNING}Not implemented external stop.\nWaiting for thread to timeout.{bcolors.ENDC}")
         finally:
             transcodeGetInfo.join(timeout=2)
     else:
-        print("transcodeGetInfo exited normally.")
+        print(f"{bcolors.OKGREEN}transcodeGetInfo {jobid} exited normally.{bcolors.ENDC}")
         mod.transcode_clean(fdr, fdw)
     if (process.returncode > 0):
         raise ValueError("command: {}\n failed with returncode: {}\nProgram output:\n{}".format(" ".join(process.args), process.returncode, process.stderr.read()))
@@ -295,10 +319,16 @@ def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
 
 
 def transcode_callback(jobid, stat):
-    status[jobid][stat[0]] = stat[1]
+    try:
+        status[jobid][stat[0]] = stat[1]
+    except IndexError:
+        print(f"{bcolors.FAIL}{stat}{bcolors.ENDC}")
+        raise IndexError
     if stat[0] == "progress":
         try:
-            for i in range(len(status)):
-                print("job id", i, ":", "progress:", status[i]["progress_perc"], "%")
+            pass
+#            for i in range(len(status)):
+#                print("job", i, ":", status[i]["progress_perc"], "%", end =" ")
+#            print(" ")
         except KeyError:
             pass
