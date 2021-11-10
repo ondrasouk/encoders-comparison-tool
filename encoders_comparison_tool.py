@@ -82,6 +82,8 @@ class sweep_param(object):
     start - number, when mode is set to 'list' the input is list.
     stop  - number, when mode is set to 'list' it is not needed.
     n     - number, when mode is set to 'list' is is not needed.
+    prefix - string, optional.
+    suffix - string, optional.
     modes:
     'add' - Creates array with ascending numbers created by adding number n to previous number. Stops when next number is larger than number stop.
     'lin' - Lineary distribute n numbers between start and stop.
@@ -89,25 +91,29 @@ class sweep_param(object):
     'list'- Only makes numpy array from python list.
     """
 
-    def __init__(self, mode, start, stop=None, n=None):
+    def __init__(self, mode, start, stop=None, n=None, prefix="", suffix=""):
         self.mode = mode
         self.start = start
         self.stop = stop
         self.n = n
+        self.prefix = str(prefix)
+        self.suffix = str(suffix)
         if (mode != "list") & ((stop is None) | (n is None)):
             raise ValueError("Only for mode 'list' the stop and n can be empty.")
 
     def __call__(self):
-        return sweep(self.mode, self.start, self.stop, self.n)
+        return sweep(self.mode, self.start, self.stop, self.n, self.prefix, self.suffix)
 
 
-def sweep(mode, start, stop, n):
+def sweep(mode, start, stop, n, prefix, suffix):
     """ Make a numpy array with generated sweep.
-    mode  - string
-            values: 'add', 'lin', 'log' or 'list'.
-    start - number, when mode is set to 'list' the input is list.
-    stop  - number, when mode is set to 'list' it is not needed.
-    n     - number, when mode is set to 'list' is is not needed.
+    mode   - string
+             values: 'add', 'lin', 'log' or 'list'.
+    start  - number, when mode is set to 'list' the input is list.
+    stop   - number, when mode is set to 'list' it is not needed.
+    n      - number, when mode is set to 'list' is is not needed.
+    prefix - string, when mode is set to 'list' is is not needed.
+    suffix - string, when mode is set to 'list' is is not needed.
     modes:
     'add' - Creates array with ascending numbers created by adding number n to previous number. Stops when next number is larger than number stop.
     'lin' - Lineary distribute n numbers between start and stop.
@@ -127,6 +133,12 @@ def sweep(mode, start, stop, n):
         values = np.array(start)
     else:
         raise ValueError("The sweep mode can only be 'add', 'lin', 'log' or 'list'.")
+    if values.dtype == "int64":
+        values = np.char.mod('%d', values)
+    else:
+        values = np.char.mod('%.3f', values)
+    values = np.char.add(prefix, values)
+    values = np.char.add(values, suffix)
     return values
 
 
@@ -252,7 +264,7 @@ def transcode(binaries, videofiles, transcode_set, outputpath):
                 x = iter([x for x in range(99999)])
                 param = ""
                 for opt in param_name:
-                    param = param + opt + "-" + str(transcode_args[param_value[next(x)]])
+                    param = param + opt + "_" + str(transcode_args[param_value[next(x)]])
                 outputfile = str(outputpath + filebasename + param + ".mkv")
                 print(outputfile)
                 args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_args), outputfile, binaries["ffprobe"]))

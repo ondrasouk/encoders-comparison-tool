@@ -72,7 +72,6 @@ def transcode_get_info(jobid, process, fdr):
         stat = re.sub(r"[\n\t\s]*", "", line).rsplit("=")
         if stat[0] == "frame":
             calc = ["progress_perc", ""]
-            print(frame_num)
             calc[1] = format((int(stat[1])/frame_num[process.args[2]])*100, '.2f')
             enc.transcode_callback(jobid, calc)
         if line == "progress=end\n":
@@ -81,3 +80,9 @@ def transcode_get_info(jobid, process, fdr):
         enc.transcode_callback(jobid, stat)
         if line == "progress=end\n":
             break
+
+# Make a function for testing configuration without actually running actual
+# transcode. For this it can be used Null demux and muxer and encode of 1 frame
+# to test the functionality of libraries that don't have test before the codecs
+# fails and throws error.
+# https://trac.ffmpeg.org/wiki/Null
