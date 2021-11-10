@@ -4,7 +4,21 @@ import re
 import encoders_comparison_tool as enc
 
 
-frame_num = 1
+# Colors in terminal
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
+frame_num = {}
 
 
 # Internal function
@@ -15,11 +29,9 @@ def transcode_cmd(binpath, filename, args, outputfile, progress_p_w=4):
 
 # Start transcode
 def transcode_start(binpath, filename, args, outputfile, ffprobepath):
+    frame_num[filename] = enc.video_frames(ffprobepath, filename)
     fdr, fdw = os.pipe()
     cmd = transcode_cmd(binpath, filename, args, outputfile, fdw)
-    global frame_num
-    frame_num = enc.video_frames(ffprobepath, filename)
-    print(frame_num)
     process = subprocess.Popen(
         cmd,
         pass_fds=[fdw],
@@ -33,23 +45,23 @@ def transcode_start(binpath, filename, args, outputfile, ffprobepath):
 
 
 # Clean after transcode ended.
-def transcode_clean(fdr, fdw):
+def transcode_clean(fdw):
     try:
         os.close(fdw)
     except OSError:
+        print(f"{bcolors.WARNING}already closed fdr {fdr}{bcolors.ENDC}")
         pass
-    try:
-        os.close(fdr)
-    # OSError means the file descriptor is either locked, blocked or not existing (closed)
-    # TODO Maybe test with fstat if the FD is closed or blocked and if blocked raise error
-    # https://stackoverflow.com/questions/6916033/check-if-file-descriptor-is-valid
-    except OSError:
-        pass
+    #
+    # Problem solved by not closing the fdr file descriptor,
+    # because the fdr is closed by context manager:
+    # for line in fdr_open:
+    # After it recieve EOF (pipe closed from fdw).
+    #
 
 
 # Optional: If the transcode_get_info has the risk of stuck implement this function.
 def transcode_get_info_stop(fdr, fdw):
-    transcode_clean(fdr, fdw)
+    transcode_clean(fdw)
 
 
 # Get info back to encoders_comparison_tool. Function must call callback function when the status changes.
@@ -60,7 +72,8 @@ def transcode_get_info(jobid, process, fdr):
         stat = re.sub(r"[\n\t\s]*", "", line).rsplit("=")
         if stat[0] == "frame":
             calc = ["progress_perc", ""]
-            calc[1] = format((int(stat[1])/frame_num)*100, '.2f')
+            print(frame_num)
+            calc[1] = format((int(stat[1])/frame_num[process.args[2]])*100, '.2f')
             enc.transcode_callback(jobid, calc)
         if line == "progress=end\n":
             calc[1] = "100.00"

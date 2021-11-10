@@ -12,6 +12,20 @@ import os
 # Refactored Classes and functions that is maybe finalized.
 ###########################################################
 
+# Colors in terminal
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
 # Everything for setting the parameters of video transcode
 
 # Videofiles properties. Key is filename.
@@ -276,19 +290,18 @@ def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
     transcodeGetInfo = threading.Thread(target=mod.transcode_get_info, args=(jobid, process, fdr))
     transcodeGetInfo.start()
     process.wait()
-    print("returncode:", process.returncode)
-    time.sleep(0.1)
     if transcodeGetInfo.isAlive():
-        try:
-            print("Unclean transcode_get_info function. Cleaning.")
-            mod.transcode_get_info_stop(fdr, fdw)
-        except AttributeError:
-            print("Not implemented external stop.\nWaiting for thread to timeout.")
-        finally:
-            transcodeGetInfo.join(timeout=2)
+        time.sleep(0.1)
+        if transcodeGetInfo.isAlive():
+            try:
+                print(f"{bcolors.FAIL}Hanged transcode_get_info on {jobid}. Cleaning.{bcolors.ENDC}")
+                mod.transcode_get_info_stop(fdr, fdw)
+            except AttributeError:
+                print(f"{bcolors.WARNING}Not implemented external stop.\nWaiting for thread to timeout.{bcolors.ENDC}")
+            finally:
+                transcodeGetInfo.join(timeout=2)
     else:
-        print("transcodeGetInfo exited normally.")
-        mod.transcode_clean(fdr, fdw)
+        mod.transcode_clean(fdw)
     if (process.returncode > 0):
         raise ValueError("command: {}\n failed with returncode: {}\nProgram output:\n{}".format(" ".join(process.args), process.returncode, process.stderr.read()))
     return process.returncode
