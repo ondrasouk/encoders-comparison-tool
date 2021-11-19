@@ -131,6 +131,7 @@ def sweep(mode, start, stop, n, prefix, suffix):
         values = np.geomspace(start, stop, n)
     elif mode == "list":
         values = np.array(start)
+        return values
     else:
         raise ValueError("The sweep mode can only be 'add', 'lin', 'log' or 'list'.")
     if values.dtype == "int64":
