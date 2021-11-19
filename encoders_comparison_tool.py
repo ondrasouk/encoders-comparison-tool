@@ -1,7 +1,7 @@
 import numpy as np
 import time
 import subprocess
-import importlib
+from importlib import util
 import threading
 import multiprocessing
 import concurrent.futures as cf
@@ -232,8 +232,8 @@ def transcode(binaries, videofiles, transcode_set, outputpath):
     """
     if isinstance(transcode_set, Transcode_setting):
         print("Dynamically loading source file:", transcode_set.transcode_plugin)
-        spec = importlib.util.spec_from_file_location("mod", transcode_set.transcode_plugin)
-        mod = importlib.util.module_from_spec(spec)
+        spec = util.spec_from_file_location("mod", transcode_set.transcode_plugin)
+        mod = util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         print("Module loaded succesfully!")
         for inputfile in videofiles:
@@ -302,9 +302,9 @@ def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
     transcodeGetInfo = threading.Thread(target=mod.transcode_get_info, args=(jobid, process, fdr))
     transcodeGetInfo.start()
     process.wait()
-    if transcodeGetInfo.isAlive():
+    if transcodeGetInfo.is_alive():
         time.sleep(0.1)
-        if transcodeGetInfo.isAlive():
+        if transcodeGetInfo.is_alive():
             try:
                 print(f"{bcolors.FAIL}Hanged transcode_get_info on {jobid}. Cleaning.{bcolors.ENDC}")
                 mod.transcode_get_info_stop(fdr, fdw)
