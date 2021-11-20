@@ -1,6 +1,7 @@
 # import config_util
 import encoders_comparison_tool as enc
 import numpy as np
+import os
 
 options = np.array([["-c:v", "libx264"],
                    ["-level", "4.1"],
@@ -25,6 +26,10 @@ transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode
 binaries = {
     "ffprobe": "/usr/bin/ffprobe"
     }
+if os.name == "nt":
+    binaries["ffprobe"] = "ffmpeg-n4.4.1-2-gcc33e73618-win64-gpl-4.4/bin/ffprobe.exe"
+    for settings in transcode_set:
+        settings.binary = "ffmpeg-n4.4.1-2-gcc33e73618-win64-gpl-4.4/bin/ffmpeg.exe"
 fileprefix = ""
 filesuffix = ".mkv"
 inputfiles_gen = (fileprefix + (str(x) + filesuffix) for x in range(1, 2))
