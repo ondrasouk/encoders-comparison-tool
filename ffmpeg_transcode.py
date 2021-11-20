@@ -24,6 +24,7 @@ frame_num = {}
 # Internal function
 def transcode_cmd(binpath, filename, args, outputfile, progress_p_w=4):
     cmd = [binpath, "-i", filename, "-nostdin", "-progress", str("pipe:" + str(progress_p_w))] + list(args) + [outputfile]
+    print(" ".join(cmd))
     return cmd
 
 
@@ -38,17 +39,20 @@ def transcode_start(binpath, filename, args, outputfile, ffprobepath):
             pass_fds=[fdw],
             text=True,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            bufsize=0,
         )
     elif os.name == "nt":
         cmd = transcode_cmd(binpath, filename, args, outputfile, fdw)
         process = subprocess.Popen(
             cmd,
             text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
         )
     else:
-        raise Exception("Jython not tested.")
-    # Call back into encoders_comparison_tool because the freezed libraries
+        raise Exception("Use Windows or Posix, other platforms not tested not tested.")
+    # Return into encoders_comparison_tool because the freezed libraries
     # (loaded with importlib) can't make a new thread or process.
     return process, fdr, fdw
 

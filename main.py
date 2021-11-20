@@ -14,8 +14,8 @@ options1 = np.array([["-c:v", "libsvtav1"],
                     ["-preset", enc.sweep_param("add", 1, 10, 1)]], dtype=object)
 options2 = np.array([["-c:v", "libx264"],
                     ["-level", "4.1"],
-                    ["-preset", "ultrafast"],
-                    ["-b:v", enc.sweep_param("log", 0.1, 5, 4, "", "M")],
+                    ["-preset", "veryslow"],
+                    ["-b:v", "1M"],
                     ["-an"],
                     ["-y"],
                     ["-sn"]], dtype=object)

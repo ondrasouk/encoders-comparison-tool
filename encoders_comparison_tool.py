@@ -325,6 +325,9 @@ def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
     transcodeGetInfo = threading.Thread(target=mod.transcode_get_info, args=(jobid, process, fdr))
     transcodeGetInfo.start()
     print("Monitor Thread starting.")
+    while process.poll() is None:
+        line = process.stderr.readline().rstrip("\n")
+        print("stderr: " + line)
     process.wait()
     if transcodeGetInfo.is_alive():
         time.sleep(0.1)
