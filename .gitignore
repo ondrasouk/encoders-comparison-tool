@@ -134,3 +134,4 @@ dmypy.json
 kate.*
 *.kate-swp
 *.sync-conflict-*
+ffmpeg*/
