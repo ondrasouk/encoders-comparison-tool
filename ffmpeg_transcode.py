@@ -31,14 +31,23 @@ def transcode_cmd(binpath, filename, args, outputfile, progress_p_w=4):
 def transcode_start(binpath, filename, args, outputfile, ffprobepath):
     frame_num[filename] = enc.video_frames(ffprobepath, filename)
     fdr, fdw = os.pipe()
-    cmd = transcode_cmd(binpath, filename, args, outputfile, fdw)
-    process = subprocess.Popen(
-        cmd,
-        pass_fds=[fdw],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE
-    )
+    if os.name == "posix":
+        cmd = transcode_cmd(binpath, filename, args, outputfile, fdw)
+        process = subprocess.Popen(
+            cmd,
+            pass_fds=[fdw],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+    elif os.name == "nt":
+        cmd = transcode_cmd(binpath, filename, args, outputfile, fdw)
+        process = subprocess.Popen(
+            cmd,
+            text=True,
+        )
+    else:
+        raise Exception("Jython not tested.")
     # Call back into encoders_comparison_tool because the freezed libraries
     # (loaded with importlib) can't make a new thread or process.
     return process, fdr, fdw
