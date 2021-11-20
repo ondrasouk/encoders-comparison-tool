@@ -74,6 +74,26 @@ class Transcode_setting(object):
                     raise ValueError("Options can only be strings or sweep parameters.")
         return args
 
+    def options_flat(self):
+        flat = []
+        for x in self.options:
+            for y in x:
+                flat.append(y)
+        return flat
+
+    def param_find(self):
+        flat = self.options_flat()
+        param_name = []
+        param_value = []
+        for x in range(len(flat)):
+            if isinstance(flat[x], sweep_param):
+                if x == 0:
+                    param_name.append("")
+                else:
+                    param_name.append(flat[x-1])
+                param_value.append(x)
+        return param_name, param_value
+
 
 class sweep_param(object):
     """ Make an callable sweep_param object that returns numpy array with sweep values.
@@ -242,20 +262,7 @@ def transcode(binaries, videofiles, transcode_set, outputpath):
             print(inputfile, "framerate:", video_framerate(binaries, inputfile))
             print(inputfile, "calculated framecount:", video_frames(binaries, inputfile))
 
-        options_flat = []
-        for x in transcode_set.options:
-            for y in x:
-                options_flat.append(y)
-
-        param_name = []
-        param_value = []
-        for x in range(len(options_flat)):
-            if isinstance(options_flat[x], sweep_param):
-                if x == 0:
-                    param_name.append("")
-                else:
-                    param_name.append(options_flat[x-1])
-                param_value.append(x)
+        param_name, param_value = transcode_set.param_find()
 
         args_in = []
         jobid = iter([x for x in range(99999)])

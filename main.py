@@ -28,7 +28,7 @@ binaries = {
 fileprefix = ""
 filesuffix = ".mkv"
 inputfiles_gen = (fileprefix + (str(x) + filesuffix) for x in range(1, 2))
-inputfiles_list = ["1.mkv"]
+inputfiles_list = ["Sintel.2010.720p_30s.mkv"]
 for f in inputfiles_list:
     print(f)
 
