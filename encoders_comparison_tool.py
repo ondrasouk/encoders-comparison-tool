@@ -32,16 +32,22 @@ class bcolors:
 videofiles_frame_num = {}
 videofiles_duration = {}
 videofiles_framerate = {}
+status = np.array([{}])
 
 
 class Transcode_setting(object):
     """ Make an callable Transcode_setting object that returns numpy array with arguments.
     transcode_plugin    - String with the path or name of transcoder plugin.
     binary              - String with binray path or name to be executed.
-    options             - Numpy array with arguments for transcoder
+    options             - Numpy array or matrix with arguments for transcoder
     concurrent          - Set how much paralel transcoding jobs to do. TODO
         values: -1 - number of processors
                 n > 0  - number of concurrent jobs for this setting
+
+    class functions:
+    options_flat() - Make an numpy array (1D) with arguments and settings.
+    param_find() - Find an sweep_param in options and return where is it in 
+        options_flat() and what is proceeding it
     """
 
     def __init__(self, transcode_plugin, binary, options, concurrent=0):
@@ -63,7 +69,7 @@ class Transcode_setting(object):
                     if args.ndim == 2:  # if there is more than one sweep parameter
                         # repeat every row by number of elements on actual sweep parameter
                         args = np.repeat(args, np.size(y()), axis=0)
-                        # add vector (repeated by number of actual size of args matrix
+                        # add vector (repeated by number of actual size of args matrix)
                         args = np.c_[args, np.tile(y(), (1, int(args.shape[0]/np.size(y())))).transpose()]
                     elif args.ndim == 1:
                         args = np.tile(args, (np.size(y()), 1))
@@ -75,6 +81,9 @@ class Transcode_setting(object):
         return args
 
     def options_flat(self):
+        """ Make an numpy array (1D) with arguments and settings.
+        Use on Transcode_setting object.
+        """
         flat = []
         for x in self.options:
             for y in x:
@@ -82,6 +91,14 @@ class Transcode_setting(object):
         return flat
 
     def param_find(self):
+        """ Find an sweep_param in options of Transcode_setting object.
+        Use on Transcode_setting object.
+        Returns touple (param_name, param_value)
+        param_name - List of names before sweep_param objects.
+        param_value - position where to find the parametric values.
+            eg. options = ["-b:v", enc.sweep_param("add", 1, 10, 1, "", "M")]
+            returns (["-b:v"], [1])
+        """
         flat = self.options_flat()
         param_name = []
         param_value = []
@@ -102,8 +119,8 @@ class sweep_param(object):
     start - number, when mode is set to 'list' the input is list.
     stop  - number, when mode is set to 'list' it is not needed.
     n     - number, when mode is set to 'list' is is not needed.
-    prefix - string, optional.
-    suffix - string, optional.
+    prefix - string, optional. Not used in 'list' mode.
+    suffix - string, optional. Not used in 'list' mode.
     modes:
     'add' - Creates array with ascending numbers created by adding number n to previous number. Stops when next number is larger than number stop.
     'lin' - Lineary distribute n numbers between start and stop.
@@ -242,15 +259,7 @@ def video_frames(binaries, filename):
 ###########################################################
 
 
-class File_parameter(object):
-    def __init__(self):
-        pass
-
-
 def transcode(binaries, videofiles, transcode_set, outputpath):
-    """ Transcode video samples in videofiles with transcode_set.
-    TODO
-    """
     if isinstance(transcode_set, Transcode_setting):
         print("Dynamically loading source file:", transcode_set.transcode_plugin)
         spec = util.spec_from_file_location("mod", transcode_set.transcode_plugin)
@@ -278,8 +287,6 @@ def transcode(binaries, videofiles, transcode_set, outputpath):
                 args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_args), outputfile, binaries["ffprobe"]))
         print(args_in)
         global status
-        if 'status' not in globals():
-            status = np.array([{}])
         not_started_job_status = {'frame': '298', 'fps': '0.00', 'total_size': '0', 'out_time': '00:00:00.000000', 'speed': '0.00x', 'progress': 'waiting', 'progress_perc': '0.00'}
         for i in range(next(jobid)-1):
             status = np.append(status, not_started_job_status.copy())
@@ -304,11 +311,11 @@ def transcode(binaries, videofiles, transcode_set, outputpath):
 
 
 def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile, ffprobepath):
-    print("job started.")
     process, fdr, fdw = mod.transcode_start(binary, inputfile, transcode_opt, outputfile, ffprobepath)
-    print("Monitor Thread starting.")
+    print("job started.")
     transcodeGetInfo = threading.Thread(target=mod.transcode_get_info, args=(jobid, process, fdr))
     transcodeGetInfo.start()
+    print("Monitor Thread starting.")
     process.wait()
     if transcodeGetInfo.is_alive():
         time.sleep(0.1)

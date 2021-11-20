@@ -59,7 +59,7 @@ def transcode_clean(fdw):
     #
 
 
-# Optional: If the transcode_get_info has the risk of stuck implement this function.
+# Optional: If the transcode_get_info has the risk of stuck, implement this function.
 def transcode_get_info_stop(fdr, fdw):
     transcode_clean(fdw)
 
