@@ -277,15 +277,21 @@ def transcode(binaries, videofiles, transcode_set, outputpath):
         jobid = iter([x for x in range(99999)])
         for inputfile in videofiles:
             filebasename = os.path.splitext(os.path.basename(inputfile))[0]
-            for transcode_args in transcode_set():
-                x = iter([x for x in range(99999)])
-                param = ""
-                for opt in param_name:
-                    param = param + opt + "_" + str(transcode_args[param_value[next(x)]])
-                outputfile = str(outputpath + filebasename + param + ".mkv")
+            if transcode_set().ndim == 1:
+                outputfile = str(outputpath + filebasename + ".mkv")
                 print(outputfile)
-                args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_args), outputfile, binaries["ffprobe"]))
+                args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_set()), outputfile, binaries["ffprobe"]))
+            else:
+                for transcode_args in transcode_set():
+                    x = iter([x for x in range(99999)])
+                    param = ""
+                    for opt in param_name:
+                        param = param + opt + "_" + str(transcode_args[param_value[next(x)]])
+                    outputfile = str(outputpath + filebasename + param + ".mkv")
+                    print(outputfile)
+                    args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_args), outputfile, binaries["ffprobe"]))
         print(args_in)
+
         global status
         not_started_job_status = {'frame': '298', 'fps': '0.00', 'total_size': '0', 'out_time': '00:00:00.000000', 'speed': '0.00x', 'progress': 'waiting', 'progress_perc': '0.00'}
         for i in range(next(jobid)-1):
