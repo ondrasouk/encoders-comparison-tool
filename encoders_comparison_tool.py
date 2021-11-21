@@ -326,8 +326,7 @@ def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
     transcodeGetInfo.start()
     print("Monitor Thread starting.")
     while process.poll() is None:
-        line = process.stderr.readline().rstrip("\n")
-        print("stderr: " + line)
+        line = process.stdout.readline().rstrip("\n")
     process.wait()
     if transcodeGetInfo.is_alive():
         time.sleep(0.1)
@@ -342,7 +341,7 @@ def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
     else:
         mod.transcode_clean(fdw)
     if (process.returncode > 0):
-        raise ValueError("command: {}\n failed with returncode: {}\nProgram output:\n{}".format(" ".join(process.args), process.returncode, process.stderr.read()))
+        raise ValueError("command: {}\n failed with returncode: {}\nProgram output:\n{}".format(" ".join(process.args), process.returncode, process.stdout.read()))
     return process.returncode
 
 

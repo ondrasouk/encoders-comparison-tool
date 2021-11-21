@@ -39,16 +39,32 @@ def transcode_start(binpath, filename, args, outputfile, ffprobepath):
             pass_fds=[fdw],
             text=True,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            bufsize=0,
+            stderr=subprocess.STDOUT,
         )
     elif os.name == "nt":
-        cmd = transcode_cmd(binpath, filename, args, outputfile, fdw)
+        fdw_dup = 0
+        fdw_dup = os.dup2(fdw, fdw_dup, inheritable=True)
+        os.close(fdw)
+        #
+        # Workaround: Use custom made pipe at stdin.
+        # Subprocess module is as close to native implementation as possible
+        # so under Windows the handles with inheritance are passed, but
+        # PIPE is file descriptor and there is almost no way around it.
+        # Python creates file descriptors for pipes at execution, only possible
+        # fix is writing my implementation that will wire up handle of PIPE to
+        # PIPE of the process.
+        # Probably in future there will be a fix for this.
+        # Associated BUG tracker and PR:
+        # https://bugs.python.org/issue32865
+        # https://github.com/python/cpython/pull/13739
+        #
+        cmd = transcode_cmd(binpath, filename, args, outputfile, fdw_dup)
         process = subprocess.Popen(
             cmd,
             text=True,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.STDOUT,
+            close_fds=True,
         )
     else:
         raise Exception("Use Windows or Posix, other platforms not tested not tested.")
