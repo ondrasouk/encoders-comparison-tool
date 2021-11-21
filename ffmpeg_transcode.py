@@ -67,7 +67,7 @@ def transcode_start(binpath, filename, args, outputfile, ffprobepath):
             close_fds=True,
         )
     else:
-        raise Exception("Use Windows or Posix, other platforms not tested not tested.")
+        raise Exception("Use Windows or Posix, other platforms not tested.")
     # Return into encoders_comparison_tool because the freezed libraries
     # (loaded with importlib) can't make a new thread or process.
     return process, fdr, fdw

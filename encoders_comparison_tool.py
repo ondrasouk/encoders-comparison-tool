@@ -40,7 +40,7 @@ class Transcode_setting(object):
     transcode_plugin    - String with the path or name of transcoder plugin.
     binary              - String with binray path or name to be executed.
     options             - Numpy array or matrix with arguments for transcoder
-    concurrent          - Set how much paralel transcoding jobs to do. TODO
+    concurrent          - Set how much paralel transcoding jobs to do.
         values: -1 - number of processors
                 n > 0  - number of concurrent jobs for this setting
 
@@ -296,7 +296,7 @@ def transcode(binaries, videofiles, transcode_set, outputpath):
         print(args_in)
 
         global status
-        not_started_job_status = {'frame': '298', 'fps': '0.00', 'total_size': '0', 'out_time': '00:00:00.000000', 'speed': '0.00x', 'progress': 'waiting', 'progress_perc': '0.00'}
+        not_started_job_status = {'frame': '0', 'fps': '0.00', 'total_size': '0', 'out_time': '00:00:00.000000', 'speed': '0.00x', 'progress': 'waiting', 'progress_perc': '0.00'}
         for i in range(next(jobid)-1):
             status = np.append(status, not_started_job_status.copy())
         if transcode_set.concurrent == 0:
