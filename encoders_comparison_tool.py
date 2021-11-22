@@ -112,6 +112,24 @@ class Transcode_setting(object):
         return param_name, param_value
 
 
+class args_iterator(object):
+    """ Make an iterator of videofiles and transcode_set
+    videofiles - iterable object with inputfile names
+    transcode_set - transcode_set()
+    """
+    def __init__(self, videofiles, transcode_set):
+        self.videofiles = videofiles
+        self.transcode_set = transcode_set
+
+    def __iter__(self):
+        for inputfile in self.videofiles:
+            if self.transcode_set.ndim == 1:
+                yield inputfile, list(self.transcode_set)
+            else:
+                for transcode_args in self.transcode_set:
+                    yield inputfile, list(transcode_args)
+
+
 class sweep_param(object):
     """ Make an callable sweep_param object that returns numpy array with sweep values.
     mode  - string
@@ -178,6 +196,12 @@ def sweep(mode, start, stop, n, prefix, suffix):
     values = np.char.add(prefix, values)
     values = np.char.add(values, suffix)
     return values
+
+
+def count(n=0):
+    while True:
+        yield n
+        n += 1
 
 
 # Functions for getting the video info.
@@ -274,25 +298,25 @@ def transcode(binaries, videofiles, transcode_set, outputpath):
         param_name, param_value = transcode_set.param_find()
 
         args_in = []
-        jobid = iter([x for x in range(99999)])
-        for inputfile in videofiles:
+        jobid = count()
+        transcode_args_iter = args_iterator(videofiles, transcode_set())
+        for inputfile, transcode_args in transcode_args_iter:
             filebasename = os.path.splitext(os.path.basename(inputfile))[0]
-            if transcode_set().ndim == 1:
-                outputfile = str(outputpath + filebasename + ".mkv")
-                args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_set()), outputfile, binaries["ffprobe"]))
+            outputfile = str(outputpath + filebasename + ".mkv")
+            param = ""
+            x = count()
+            if param_name == []:
+                args_in.append((next(jobid), mod, transcode_set.binary, inputfile, transcode_args, outputfile, binaries["ffprobe"]))
             else:
-                for transcode_args in transcode_set():
-                    x = iter([x for x in range(99999)])
-                    param = ""
-                    for opt in param_name:
-                        param = param + opt + "_" + str(transcode_args[param_value[next(x)]])
-                    outputfile = str(filebasename + param)
-                    for ch in ['\\', '/', '|', '*', '"', '?', ':', '<', '>']:
-                        if ch in outputfile:
-                            outputfile = outputfile.replace(ch, "")
-                    outputfile = str(outputpath + outputfile + ".mkv")
-                    print(outputfile)
-                    args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_args), outputfile, binaries["ffprobe"]))
+                for opt in param_name:
+                    param = param + opt + "_" + str(transcode_args[param_value[next(x)]])
+                outputfile = str(filebasename + param)
+                for ch in ['\\', '/', '|', '*', '"', '?', ':', '<', '>']:
+                    if ch in outputfile:
+                        outputfile = outputfile.replace(ch, "")
+                outputfile = str(outputpath + outputfile + ".mkv")
+                print(outputfile)
+                args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_args), outputfile, binaries["ffprobe"]))
         print(args_in)
 
         global status
@@ -307,16 +331,16 @@ def transcode(binaries, videofiles, transcode_set, outputpath):
             concurrency = transcode_set.concurrent
             # TODO Do not use more than 61 threads under Windows (needs test for this)
             # https://stackoverflow.com/questions/1006289/how-to-find-out-the-number-of-cpus-using-python
-        print(concurrency)
 
         with cf.ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix='job') as pool:
             futures = tuple(pool.submit(transcode_job_wrap, *args) for args in tuple(args_in))
 
-        jobid = iter([x for x in range(99999)])
+        jobid = count()
         for future in futures:
             print("Exceptions on job:", next(jobid), ":", future.exception())
+            # TODO Preferably use jobid from args_in
     else:
-        raise TypeError("Only Transcode_setting class object is passable.")
+        raise TypeError("Only Transcode_setting class object is allowed.")
 
 
 def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile, ffprobepath):
@@ -326,7 +350,8 @@ def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
     transcodeGetInfo.start()
     print("Monitor Thread starting.")
     while process.poll() is None:
-        line = process.stdout.readline().rstrip("\n")
+        line = process.stdout.readline().rstrip("\n")  # Read from stdout, because Windows has blocking pipes.
+        # TODO For GUI usage there must be update
     process.wait()
     if transcodeGetInfo.is_alive():
         time.sleep(0.1)

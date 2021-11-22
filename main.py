@@ -14,15 +14,16 @@ options1 = np.array([["-c:v", "libsvtav1"],
                     ["-preset", enc.sweep_param("add", 1, 10, 1)]], dtype=object)
 options2 = np.array([["-c:v", "libx264"],
                     ["-level", "4.1"],
-                    ["-preset", "veryslow"],
-                    ["-b:v", "1M"],
+                    ["-preset", "ultrafast"],
+                    ["-b:v", enc.sweep_param("add", 0.1, 2, 1, "", "M")],
                     ["-an"],
                     ["-y"],
+                    ["-t", "0.04"],
                     ["-sn"]], dtype=object)
 transcode_set = []
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options))
-transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "ffmpeg", options1, concurrent=-1))
-transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "ffmpeg", options2, concurrent=1))
+transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options1, concurrent=-1))
+transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options2, concurrent=1))
 binaries = {
     "ffprobe": "/usr/bin/ffprobe"
     }
@@ -33,13 +34,16 @@ if os.name == "nt":
 fileprefix = ""
 filesuffix = ".mkv"
 inputfiles_gen = (fileprefix + (str(x) + filesuffix) for x in range(1, 2))
-inputfiles_list = ["Sintel.2010.720p_30s.mkv"]
+inputfiles_list = ["Sintel.2010.720p_30s.mkv", "1.mkv", "2.mkv"]
 for f in inputfiles_list:
     print(f)
 
 outputpath = "out/"
+if os.path.isdir(outputpath) == 0:
+    os.mkdir(outputpath)
 
 print(transcode_set[2]())
+print("")
 print("encoding:\n")
 enc.transcode(binaries, inputfiles_list, transcode_set[2], outputpath)
 # TODO Make possible to pass an File_parameter class object that works as list
