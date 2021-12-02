@@ -46,7 +46,7 @@ class Transcode_setting(object):
 
     class functions:
     options_flat() - Make an numpy array (1D) with arguments and settings.
-    param_find() - Find an sweep_param in options and return where is it in 
+    param_find() - Find an sweep_param in options and return where is it in
         options_flat() and what is proceeding it
     """
 
@@ -117,6 +117,7 @@ class args_iterator(object):
     videofiles - iterable object with inputfile names
     transcode_set - transcode_set()
     """
+
     def __init__(self, videofiles, transcode_set):
         self.videofiles = videofiles
         self.transcode_set = transcode_set
@@ -158,6 +159,12 @@ class sweep_param(object):
 
     def __call__(self):
         return sweep(self.mode, self.start, self.stop, self.n, self.prefix, self.suffix)
+
+    def limits(self):
+        if self.mode == "list":
+            return self()
+        else:
+            return self()[0], self()[-1]
 
 
 def sweep(mode, start, stop, n, prefix, suffix):
@@ -378,3 +385,63 @@ def transcode_callback(jobid, stat):
                 print("job id", i, ":", "progress:", status[i]["progress_perc"], "%")
         except KeyError:
             pass
+
+
+def transcode_check(binaries, videofiles, transcode_set, mode="quick", param_pos=None):
+    print("Dynamically loading source file:", transcode_set.transcode_plugin)
+    spec = util.spec_from_file_location("mod", transcode_set.transcode_plugin)
+    mod = util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    print("Module loaded succesfully!")
+    args = []
+    if transcode_set().ndim == 1:
+        args = transcode_set()
+    elif param_pos is None and mode == "quick":
+        param_name, param_value = transcode_set.param_find()
+        args = transcode_set()
+        todel = np.ones(len(args), dtype=bool)
+        for param in param_value:
+            limits = transcode_set.options_flat()[param].limits()
+            mask = np.ones(len(args), dtype=bool)
+            for lim in limits:
+                mask = np.logical_and(mask, (args[:, param] != lim))
+            todel = np.logical_and(~mask, todel)
+        args = args[todel]
+    elif param_pos is None and mode == "slow":
+        args = transcode_set()
+    elif mode == "quick":
+        param_pos = int(param_pos)
+        param_name, param_value = transcode_set.param_find()
+        if param_pos not in param_value:
+            raise ValueError(f"param_pos={param_pos} is not pointing to sweep_param object. sweep_param is at {param_value}")
+        lim = transcode_set.options_flat()[param_pos].limits()
+        arg = transcode_set.options_flat()
+        for p in param_value:
+            arg[p] = arg[p]()[0]
+        for x in lim:
+            arg[param_pos] = x
+            args.append(arg.copy())
+    elif mode == "slow":
+        param_pos = int(param_pos)
+        param_name, param_value = transcode_set.param_find()
+        if param_pos not in param_value:
+            raise ValueError(f"param_pos={param_pos} is not pointing to sweep_param object. sweep_param is at {param_value}")
+        param = transcode_set.options_flat()[param_pos]()
+        arg = transcode_set.options_flat()
+        for p in param_value:
+            arg[p] = arg[p]()[0]
+        for x in param:
+            arg[param_pos] = x
+            args.append(arg.copy())
+    else:
+        raise ValueError("Wrong input mode.")
+    print(f"check args: {args}")
+    returncodes = []
+    if mode == "quick":
+        for arg in args:
+            returncodes.append(mod.transcode_check_arguments(transcode_set.binary, "", arg, binaries, mode))
+    else:
+        for inputfile in videofiles:
+            for arg in args:
+                returncodes.append(mod.transcode_check_arguments(transcode_set.binary, inputfile, arg, binaries, mode))
+    return all(v == 0 for v in returncodes)

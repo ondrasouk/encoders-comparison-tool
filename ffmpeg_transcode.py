@@ -3,6 +3,7 @@ import os
 import re
 import encoders_comparison_tool as enc
 
+MODULE_SUPPORTS_CHECKCONFIG = 1
 
 # Colors in terminal
 
@@ -19,6 +20,7 @@ class bcolors:
 
 
 frame_num = {}
+config_test_quick = {}
 
 
 # Internal function
@@ -110,8 +112,36 @@ def transcode_get_info(jobid, process, fdr):
         if line == "progress=end\n":
             break
 
-# Make a function for testing configuration without actually running actual
-# transcode. For this it can be used Null demux and muxer and encode of 1 frame
-# to test the functionality of libraries that don't have test before the codecs
-# fails and throws error.
-# https://trac.ffmpeg.org/wiki/Null
+
+# Test if configuration works
+def transcode_check_arguments(binpath, filename, args, binaries, mode="quick"):
+    key = "".join(args)
+    if mode == "slow":
+        framerate = enc.video_framerate(binaries, filename)
+        testtime = str(2/framerate)  # two or one frame to encode
+        outputfile = "test.mkv"
+        command = [binpath, "-i", filename, "-t", testtime]
+        command.extend(args)
+        command.extend(["-y", outputfile])
+    elif mode == "quick":
+        try:
+            returncode = config_test_quick[key]
+            return returncode
+        except KeyError:
+            args_command = " ".join(args)
+            command = [binpath, "-f", "lavfi", "-i", "nullsrc=s=16x16:d=0.04:r=25", "-f", "lavfi", "-i", "anullsrc"]
+            command.extend(args)
+            if os.name == "posix":
+                command.extend(["-f", "matroska", "/dev/null"])
+            if os.name == "nt":
+                command.extend(["-f", "matroska", "NUL"])
+            # Works pretty reliabely, tests only one frame to encode. without
+            # muxer. It the output container supports arguments is not tested.
+    process = subprocess.run(command, capture_output=True, text=True, shell=False)
+    if mode == "slow":
+        os.remove(outputfile)
+    if process.returncode == 0:
+        config_test_quick[key] = 0
+        return 0
+    else:
+        return process.stderr

@@ -14,8 +14,8 @@ options1 = np.array([["-c:v", "libsvtav1"],
                     ["-preset", enc.sweep_param("add", 1, 10, 1)]], dtype=object)
 options2 = np.array([["-c:v", "libx264"],
                     ["-level", "4.1"],
-                    ["-preset", "ultrafast"],
-                    ["-b:v", enc.sweep_param("add", 0.1, 2, 1, "", "M")],
+                    ["-preset", enc.sweep_param("list", ["ultrafast", "medium", "slow"])],
+                    ["-b:v", enc.sweep_param("lin", 0.1, 4, 4, "", "M")],
                     ["-an"],
                     ["-y"],
                     ["-t", "0.04"],
@@ -42,10 +42,13 @@ outputpath = "out/"
 if os.path.isdir(outputpath) == 0:
     os.mkdir(outputpath)
 
+print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2]))
+#print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2], "slow"))
+print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2], "quick", 7))
+#print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2], "slow", 7))
+print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2]))
 print(transcode_set[2]())
 print("")
 print("encoding:\n")
-enc.transcode(binaries, inputfiles_list, transcode_set[2], outputpath)
-# TODO Make possible to pass an File_parameter class object that works as list
-#      or as generator for many names. Eg. 1.mkv, 2.mkv,...
-#      For input files and output files.
+#enc.transcode(binaries, inputfiles_list, transcode_set[2], outputpath)
+
