@@ -1,19 +1,14 @@
-import numpy as np
+import os
 import time
 import subprocess
-from importlib import util
 import threading
 import multiprocessing
 import concurrent.futures as cf
-import os
+from importlib import util
+import numpy as np
 
-
-###########################################################
-# Refactored Classes and functions that is maybe finalized.
-###########################################################
 
 # Colors in terminal
-
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -28,7 +23,7 @@ class bcolors:
 
 # Everything for setting the parameters of video transcode
 
-# Videofiles properties. Key is filename.
+# Videofiles properties. Key is video file path.
 videofiles_frame_num = {}
 videofiles_duration = {}
 videofiles_framerate = {}
@@ -37,6 +32,7 @@ status = np.array([{}])
 
 class Transcode_setting(object):
     """ Make an callable Transcode_setting object that returns numpy array with arguments.
+
     transcode_plugin    - String with the path or name of transcoder plugin.
     binary              - String with binray path or name to be executed.
     options             - Numpy array or matrix with arguments for transcoder
@@ -83,6 +79,7 @@ class Transcode_setting(object):
     def options_flat(self):
         """ Make an numpy array (1D) with arguments and settings.
         Use on Transcode_setting object.
+        Returns: ['-c:v', 'libx265', '-crf', <sweep_param object>, '-an']
         """
         flat = []
         for x in self.options:
@@ -214,7 +211,7 @@ def count(n=0):
 # Functions for getting the video info.
 
 
-def video_length_seconds(binaries, filename):
+def video_length_seconds(binaries, videofile_path):
     if type(binaries) == str:
         ffprobepath = binaries
     elif type(binaries) == dict:
@@ -224,7 +221,7 @@ def video_length_seconds(binaries, filename):
 
     global videofiles_duration
     try:
-        duration = videofiles_duration[filename]
+        duration = videofiles_duration[videofile_path]
         return duration
     except KeyError:
         result = subprocess.run(
@@ -236,7 +233,7 @@ def video_length_seconds(binaries, filename):
                 "format=duration",
                 "-of",
                 "default=noprint_wrappers=1:nokey=1",
-                filename,
+                videofile_path,
             ],
             capture_output=True,
             text=True,
@@ -247,7 +244,7 @@ def video_length_seconds(binaries, filename):
             raise ValueError(result.stderr.rstrip("\n"))
 
 
-def video_framerate(binaries, filename):
+def video_framerate(binaries, videofile_path):
     if type(binaries) == str:
         ffprobepath = binaries
     elif type(binaries) == dict:
@@ -257,7 +254,7 @@ def video_framerate(binaries, filename):
 
     global videofiles_duration
     try:
-        framerate = videofiles_framerate[filename]
+        framerate = videofiles_framerate[videofile_path]
         return framerate
     except KeyError:
         result = subprocess.run(
@@ -269,7 +266,7 @@ def video_framerate(binaries, filename):
                 "stream=r_frame_rate",
                 "-of",
                 "default=noprint_wrappers=1:nokey=1",
-                filename,
+                videofile_path,
             ],
             capture_output=True,
             text=True,
@@ -282,8 +279,8 @@ def video_framerate(binaries, filename):
             raise ValueError(result.stderr.rstrip("\n"))
 
 
-def video_frames(binaries, filename):
-    return int(video_framerate(binaries, filename) * video_length_seconds(binaries, filename))
+def video_frames(binaries, videofile_path):
+    return int(video_framerate(binaries, videofile_path) * video_length_seconds(binaries, videofile_path))
 
 ###########################################################
 # Code under heavy development.

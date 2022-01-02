@@ -1,11 +1,12 @@
-import subprocess
 import os
 import re
+import subprocess
 import encoders_comparison_tool as enc
 
 MODULE_SUPPORTS_CHECKCONFIG = 1
 
 # Colors in terminal
+
 
 class bcolors:
     HEADER = '\033[95m'
@@ -80,7 +81,7 @@ def transcode_clean(fdw):
     try:
         os.close(fdw)
     except OSError:
-        print(f"{bcolors.WARNING}already closed fdr {fdr}{bcolors.ENDC}")
+        print(f"{bcolors.WARNING}already closed fdw {fdw}{bcolors.ENDC}")
         pass
     #
     # Problem solved by not closing the fdr file descriptor,

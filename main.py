@@ -1,7 +1,8 @@
 # import config_util
-import encoders_comparison_tool as enc
-import numpy as np
 import os
+import numpy as np
+import encoders_comparison_tool as enc
+
 
 options = np.array([["-c:v", "libx264"],
                    ["-level", "4.1"],
@@ -43,12 +44,11 @@ if os.path.isdir(outputpath) == 0:
     os.mkdir(outputpath)
 
 print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2]))
-#print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2], "slow"))
+# print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2], "slow"))
 print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2], "quick", 7))
-#print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2], "slow", 7))
+# print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2], "slow", 7))
 print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2]))
 print(transcode_set[2]())
 print("")
 print("encoding:\n")
-#enc.transcode(binaries, inputfiles_list, transcode_set[2], outputpath)
-
+# enc.transcode(binaries, inputfiles_list, transcode_set[2], outputpath)
