@@ -23,7 +23,10 @@ config_test_quick = {}
 
 # Internal function
 def _transcode_cmd(binpath, filename, args, outputfile, progress_p_w=4):
-    cmd = [binpath, "-i", filename, "-nostdin", "-progress", str("pipe:" + str(progress_p_w))] + list(args) + [outputfile]
+    cmd = [
+        binpath, "-i", filename, "-nostdin", "-progress",
+        str("pipe:" + str(progress_p_w))
+    ] + list(args) + [outputfile]
     print(" ".join(cmd))
     return cmd
 
@@ -101,7 +104,8 @@ def transcode_get_info(jobid, process, fdr):
         stat = re.sub(r"[\n\t\s]*", "", line).rsplit("=")
         if stat[0] == "frame":
             calc = ["progress_perc", ""]
-            calc[1] = format((int(stat[1])/frame_num[process.args[2]])*100, '.2f')
+            calc[1] = format((int(stat[1]) / frame_num[process.args[2]]) * 100,
+                             '.2f')
             enc.transcode_callback(jobid, calc)
         if line == "progress=end\n":
             calc[1] = "100.00"
@@ -116,7 +120,7 @@ def transcode_check_arguments(binpath, filename, args, binaries, mode="quick"):
     key = "".join(args)
     if mode == "slow":
         framerate = enc.video_framerate(binaries, filename)
-        testtime = str(2/framerate)  # two or one frame to encode
+        testtime = str(2 / framerate)  # two or one frame to encode
         outputfile = "test.mkv"
         command = [binpath, "-i", filename, "-t", testtime]
         command.extend(args)
@@ -126,7 +130,10 @@ def transcode_check_arguments(binpath, filename, args, binaries, mode="quick"):
             returncode = config_test_quick[key]
             return returncode
         except KeyError:
-            command = [binpath, "-f", "lavfi", "-i", "nullsrc=s=16x16:d=0.04:r=25", "-f", "lavfi", "-i", "anullsrc"]
+            command = [
+                binpath, "-f", "lavfi", "-i", "nullsrc=s=16x16:d=0.04:r=25",
+                "-f", "lavfi", "-i", "anullsrc"
+            ]
             command.extend(args)
             if os.name == "posix":
                 command.extend(["-f", "matroska", "/dev/null"])
@@ -134,7 +141,10 @@ def transcode_check_arguments(binpath, filename, args, binaries, mode="quick"):
                 command.extend(["-f", "matroska", "NUL"])
             # Works pretty reliabely, tests only one frame to encode. without
             # muxer. It the output container supports arguments is not tested.
-    process = subprocess.run(command, capture_output=True, text=True, shell=False)
+    process = subprocess.run(command,
+                             capture_output=True,
+                             text=True,
+                             shell=False)
     if mode == "slow":
         os.remove(outputfile)
     if process.returncode == 0:
