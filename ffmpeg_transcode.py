@@ -3,11 +3,8 @@ import re
 import subprocess
 import encoders_comparison_tool as enc
 
-MODULE_SUPPORTS_CHECKCONFIG = 1
 
 # Colors in terminal
-
-
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -25,7 +22,7 @@ config_test_quick = {}
 
 
 # Internal function
-def transcode_cmd(binpath, filename, args, outputfile, progress_p_w=4):
+def _transcode_cmd(binpath, filename, args, outputfile, progress_p_w=4):
     cmd = [binpath, "-i", filename, "-nostdin", "-progress", str("pipe:" + str(progress_p_w))] + list(args) + [outputfile]
     print(" ".join(cmd))
     return cmd
@@ -36,7 +33,7 @@ def transcode_start(binpath, filename, args, outputfile, ffprobepath):
     frame_num[filename] = enc.video_frames(ffprobepath, filename)
     fdr, fdw = os.pipe()
     if os.name == "posix":
-        cmd = transcode_cmd(binpath, filename, args, outputfile, fdw)
+        cmd = _transcode_cmd(binpath, filename, args, outputfile, fdw)
         process = subprocess.Popen(
             cmd,
             pass_fds=[fdw],
@@ -61,7 +58,7 @@ def transcode_start(binpath, filename, args, outputfile, ffprobepath):
         # https://bugs.python.org/issue32865
         # https://github.com/python/cpython/pull/13739
         #
-        cmd = transcode_cmd(binpath, filename, args, outputfile, fdw_dup)
+        cmd = _transcode_cmd(binpath, filename, args, outputfile, fdw_dup)
         process = subprocess.Popen(
             cmd,
             text=True,
@@ -129,7 +126,6 @@ def transcode_check_arguments(binpath, filename, args, binaries, mode="quick"):
             returncode = config_test_quick[key]
             return returncode
         except KeyError:
-            args_command = " ".join(args)
             command = [binpath, "-f", "lavfi", "-i", "nullsrc=s=16x16:d=0.04:r=25", "-f", "lavfi", "-i", "anullsrc"]
             command.extend(args)
             if os.name == "posix":

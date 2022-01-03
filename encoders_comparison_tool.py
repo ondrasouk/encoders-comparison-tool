@@ -2,7 +2,6 @@ import os
 import time
 import subprocess
 import threading
-import multiprocessing
 import concurrent.futures as cf
 from importlib import util
 import numpy as np
@@ -27,6 +26,8 @@ class bcolors:
 videofiles_frame_num = {}
 videofiles_duration = {}
 videofiles_framerate = {}
+
+# Index corresponds to job_id.
 status = np.array([{}])
 
 
@@ -46,7 +47,7 @@ class Transcode_setting(object):
         options_flat() and what is proceeding it
     """
 
-    def __init__(self, transcode_plugin, binary, options, concurrent=0):
+    def __init__(self, transcode_plugin: str, binary: str, options, concurrent: int = 0):
         self.transcode_plugin = transcode_plugin
         self.binary = binary
         self.options = options
@@ -62,12 +63,13 @@ class Transcode_setting(object):
                     else:               # else is 2D array
                         args = np.c_[args, np.tile(y, (args.shape[0], 1))]
                 elif isinstance(y, sweep_param):
-                    if args.ndim == 2:  # if there is more than one sweep parameter
-                        # repeat every row by number of elements on actual sweep parameter
+                    if args.ndim == 2:  # if there is more than one sweep
+                        # parameter repeat every row by number of elements on
+                        # actual sweep parameter
                         args = np.repeat(args, np.size(y()), axis=0)
                         # add vector (repeated by number of actual size of args matrix)
                         args = np.c_[args, np.tile(y(), (1, int(args.shape[0]/np.size(y())))).transpose()]
-                    elif args.ndim == 1:
+                    elif args.ndim == 1:  # if this is first sweep
                         args = np.tile(args, (np.size(y()), 1))
                         args = np.c_[args, y().transpose()]
                     else:
@@ -107,6 +109,37 @@ class Transcode_setting(object):
                     param_name.append(flat[x-1])
                 param_value.append(x)
         return param_name, param_value
+
+    def edge_cases(self):
+        args = np.array([])
+        for x in self.options:
+            for y in x:
+                if type(y) is str:      # self.options[x][y] is only string
+                    if args.ndim != 2:  # the args is 1D array
+                        args = np.append(args, y)
+                    else:               # else is 2D array
+                        args = np.c_[args, np.tile(y, (args.shape[0], 1))]
+                elif isinstance(y, sweep_param):
+                    if args.ndim == 2:  # if there is more than one sweep
+                        # parameter repeat every row by number of elements on
+                        # actual sweep parameter
+                        args = np.repeat(args, np.size(y.limits()), axis=0)
+                        # add vector (repeated by number of actual size of args matrix)
+                        args = np.c_[args, np.tile(y.limits(), (1, int(args.shape[0]/np.size(y.limits())))).transpose()]
+                    elif args.ndim == 1:  # if this is first sweep
+                        args = np.tile(args, (np.size(y.limits()), 1))
+                        args = np.c_[args, y.limits().transpose()]
+                    else:
+                        raise Exception("Impossible error in args.ndim.")
+                else:
+                    raise ValueError("Options can only be strings or sweep parameters.")
+        return args
+
+    def is_pos_param(self, pos: int) -> bool:
+        param_name, param_value = self.param_find()
+        if pos not in param_value:
+            raise ValueError(f"param_pos={pos} is not pointing to sweep_param object. sweep_param is at {param_value}")
+        return True
 
 
 class args_iterator(object):
@@ -208,6 +241,30 @@ def count(n=0):
         n += 1
 
 
+def transcode_args(binaries, mod, transcode_set, videofiles, output_path):
+    param_name, param_value = transcode_set.param_find()
+    args_in = []
+    jobid = count()
+    transcode_args_iter = args_iterator(videofiles, transcode_set())
+    for inputfile, transcode_args in transcode_args_iter:
+        filebasename = os.path.splitext(os.path.basename(inputfile))[0]
+        outputfile = str(output_path + filebasename + ".mkv")
+        param = ""
+        x = count()
+        if param_name == []:
+            args_in.append((next(jobid), mod, transcode_set.binary, inputfile, transcode_args, outputfile, binaries["ffprobe"]))
+        else:
+            for opt in param_name:
+                param = param + opt + "_" + str(transcode_args[param_value[next(x)]])
+            outputfile = str(filebasename + param)
+            for ch in ['\\', '/', '|', '*', '"', '?', ':', '<', '>']:
+                if ch in outputfile:
+                    outputfile = outputfile.replace(ch, "")
+            outputfile = str(output_path + outputfile + ".mkv")
+            print(outputfile)
+            args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_args), outputfile, binaries["ffprobe"]))
+    return args_in
+
 # Functions for getting the video info.
 
 
@@ -283,68 +340,43 @@ def video_frames(binaries, videofile_path):
     return int(video_framerate(binaries, videofile_path) * video_length_seconds(binaries, videofile_path))
 
 ###########################################################
-# Code under heavy development.
+# Code for transcoding
 ###########################################################
 
 
-def transcode(binaries, videofiles, transcode_set, outputpath):
-    if isinstance(transcode_set, Transcode_setting):
-        print("Dynamically loading source file:", transcode_set.transcode_plugin)
-        spec = util.spec_from_file_location("mod", transcode_set.transcode_plugin)
-        mod = util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        print("Module loaded succesfully!")
-        for inputfile in videofiles:
-            print(inputfile, "duration:", video_length_seconds(binaries, inputfile))
-            print(inputfile, "framerate:", video_framerate(binaries, inputfile))
-            print(inputfile, "calculated framecount:", video_frames(binaries, inputfile))
+def transcode(binaries, videofiles, transcode_set, output_path):
+    print(f"Dynamically loading source file: {transcode_set.transcode_plugin}")
+    spec = util.spec_from_file_location("mod", transcode_set.transcode_plugin)
+    mod = util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    print("Module loaded succesfully!")
+    for video in videofiles:
+        print(f"{video} duration: {video_length_seconds(binaries, video)}")
+        print(f"{video} framerate: {video_framerate(binaries, video)}")
+        print(f"{video} calculated framecount: {video_frames(binaries, video)}")
 
-        param_name, param_value = transcode_set.param_find()
+    args_in = transcode_args(binaries, mod, transcode_set, videofiles, output_path)
+    print(args_in)
 
-        args_in = []
-        jobid = count()
-        transcode_args_iter = args_iterator(videofiles, transcode_set())
-        for inputfile, transcode_args in transcode_args_iter:
-            filebasename = os.path.splitext(os.path.basename(inputfile))[0]
-            outputfile = str(outputpath + filebasename + ".mkv")
-            param = ""
-            x = count()
-            if param_name == []:
-                args_in.append((next(jobid), mod, transcode_set.binary, inputfile, transcode_args, outputfile, binaries["ffprobe"]))
-            else:
-                for opt in param_name:
-                    param = param + opt + "_" + str(transcode_args[param_value[next(x)]])
-                outputfile = str(filebasename + param)
-                for ch in ['\\', '/', '|', '*', '"', '?', ':', '<', '>']:
-                    if ch in outputfile:
-                        outputfile = outputfile.replace(ch, "")
-                outputfile = str(outputpath + outputfile + ".mkv")
-                print(outputfile)
-                args_in.append((next(jobid), mod, transcode_set.binary, inputfile, list(transcode_args), outputfile, binaries["ffprobe"]))
-        print(args_in)
+    global status
+    not_started_job_status = {'frame': '0', 'fps': '0.00', 'total_size': '0', 'out_time': '00:00:00.000000', 'speed': '0.00x', 'progress': 'waiting', 'progress_perc': '0.00'}
+    for i in range(len(args_in)-1):  # job_id starts from 0
+        status = np.append(status, not_started_job_status.copy())
 
-        global status
-        not_started_job_status = {'frame': '0', 'fps': '0.00', 'total_size': '0', 'out_time': '00:00:00.000000', 'speed': '0.00x', 'progress': 'waiting', 'progress_perc': '0.00'}
-        for i in range(next(jobid)-1):
-            status = np.append(status, not_started_job_status.copy())
-        if transcode_set.concurrent == 0:
-            concurrency = 1
-        elif transcode_set.concurrent == -1:
-            concurrency = multiprocessing.cpu_count()  # TODO maybe use len(os.sched_getaffinity(0))
-        else:
-            concurrency = transcode_set.concurrent
-            # TODO Do not use more than 61 threads under Windows (needs test for this)
-            # https://stackoverflow.com/questions/1006289/how-to-find-out-the-number-of-cpus-using-python
-
-        with cf.ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix='job') as pool:
-            futures = tuple(pool.submit(transcode_job_wrap, *args) for args in tuple(args_in))
-
-        jobid = count()
-        for future in futures:
-            print("Exceptions on job:", next(jobid), ":", future.exception())
-            # TODO Preferably use jobid from args_in
+    if transcode_set.concurrent == 0:
+        concurrency = 1
+    elif transcode_set.concurrent == -1:
+        concurrency = len(os.sched_getaffinity(0))
     else:
-        raise TypeError("Only Transcode_setting class object is allowed.")
+        concurrency = transcode_set.concurrent
+        # TODO Do not use more than 61 threads under Windows
+        # https://stackoverflow.com/questions/1006289/how-to-find-out-the-number-of-cpus-using-python
+
+    with cf.ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix='job') as pool:
+        futures = tuple(pool.submit(transcode_job_wrap, *args) for args in tuple(args_in))
+
+    for future in futures:
+        print(f"Exceptions on job {future.result()[0]}: {future.exception()}")
 
 
 def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile, ffprobepath):
@@ -354,8 +386,9 @@ def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
     transcodeGetInfo.start()
     print("Monitor Thread starting.")
     while process.poll() is None:
-        line = process.stdout.readline().rstrip("\n")  # Read from stdout, because Windows has blocking pipes.
-        # TODO For GUI usage there must be update
+        line = process.stdout.readline().rstrip("\n")
+        # Read from stdout, because Windows has blocking pipes.
+        # TODO For GUI usage there must be callback
     process.wait()
     if transcodeGetInfo.is_alive():
         time.sleep(0.1)
@@ -371,7 +404,7 @@ def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
         mod.transcode_clean(fdw)
     if (process.returncode > 0):
         raise ValueError("command: {}\n failed with returncode: {}\nProgram output:\n{}".format(" ".join(process.args), process.returncode, process.stdout.read()))
-    return process.returncode
+    return jobid, process.returncode
 
 
 def transcode_callback(jobid, stat):
@@ -379,13 +412,13 @@ def transcode_callback(jobid, stat):
     if stat[0] == "progress":
         try:
             for i in range(len(status)):
-                print("job id", i, ":", "progress:", status[i]["progress_perc"], "%")
+                print(f"job id {i} progress: {status[i]['progress_perc']}%")
         except KeyError:
             pass
 
 
 def transcode_check(binaries, videofiles, transcode_set, mode="quick", param_pos=None):
-    print("Dynamically loading source file:", transcode_set.transcode_plugin)
+    print(f"Dynamically loading source file: {transcode_set.transcode_plugin}")
     spec = util.spec_from_file_location("mod", transcode_set.transcode_plugin)
     mod = util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -394,23 +427,12 @@ def transcode_check(binaries, videofiles, transcode_set, mode="quick", param_pos
     if transcode_set().ndim == 1:
         args = transcode_set()
     elif param_pos is None and mode == "quick":
-        param_name, param_value = transcode_set.param_find()
-        args = transcode_set()
-        todel = np.ones(len(args), dtype=bool)
-        for param in param_value:
-            limits = transcode_set.options_flat()[param].limits()
-            mask = np.ones(len(args), dtype=bool)
-            for lim in limits:
-                mask = np.logical_and(mask, (args[:, param] != lim))
-            todel = np.logical_and(~mask, todel)
-        args = args[todel]
+        args = transcode_set.edge_cases()
     elif param_pos is None and mode == "slow":
         args = transcode_set()
     elif mode == "quick":
-        param_pos = int(param_pos)
+        transcode_set.is_pos_param(param_pos)
         param_name, param_value = transcode_set.param_find()
-        if param_pos not in param_value:
-            raise ValueError(f"param_pos={param_pos} is not pointing to sweep_param object. sweep_param is at {param_value}")
         lim = transcode_set.options_flat()[param_pos].limits()
         arg = transcode_set.options_flat()
         for p in param_value:
@@ -419,10 +441,8 @@ def transcode_check(binaries, videofiles, transcode_set, mode="quick", param_pos
             arg[param_pos] = x
             args.append(arg.copy())
     elif mode == "slow":
-        param_pos = int(param_pos)
+        transcode_set.is_pos_param(param_pos)
         param_name, param_value = transcode_set.param_find()
-        if param_pos not in param_value:
-            raise ValueError(f"param_pos={param_pos} is not pointing to sweep_param object. sweep_param is at {param_value}")
         param = transcode_set.options_flat()[param_pos]()
         arg = transcode_set.options_flat()
         for p in param_value:
