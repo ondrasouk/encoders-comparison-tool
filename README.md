@@ -8,7 +8,7 @@ Tool for batch transcoding video sequences for video encoder comparison.
 - [x] Batch transcoding using FFmpeg.
 - [x] Catching non zero return codes.
 - [x] Paralel jobs in batch transcoding.
-- [ ] Save report from FFmpeg.
+- [x] Save report from FFmpeg.
 - [ ] Better documentation.
 - [ ] Objective video quality metrics.
 

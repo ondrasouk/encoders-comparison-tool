@@ -34,6 +34,8 @@ def _transcode_cmd(binpath, filename, args, outputfile, progress_p_w=4):
 # Start transcode
 def transcode_start(binpath, filename, args, outputfile, ffprobepath):
     frame_num[filename] = enc.video_frames(ffprobepath, filename)
+    ffreport = {"FFREPORT": f"file={outputfile[0: -3]}report"}
+    ffenv = {**os.environ, **ffreport}
     fdr, fdw = os.pipe()
     if os.name == "posix":
         cmd = _transcode_cmd(binpath, filename, args, outputfile, fdw)
@@ -43,6 +45,7 @@ def transcode_start(binpath, filename, args, outputfile, ffprobepath):
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            env=ffenv,
         )
     elif os.name == "nt":
         fdw_dup = 0
@@ -68,6 +71,7 @@ def transcode_start(binpath, filename, args, outputfile, ffprobepath):
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             close_fds=True,
+            env=ffenv,
         )
     else:
         raise Exception("Use Windows or Posix, other platforms not tested.")
