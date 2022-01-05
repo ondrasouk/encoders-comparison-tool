@@ -22,23 +22,47 @@ config_test_quick = {}
 
 
 # Internal function
-def _transcode_cmd(binpath, filename, args, outputfile, progress_p_w=4):
-    cmd = [
-        binpath, "-i", filename, "-nostdin", "-progress",
-        str("pipe:" + str(progress_p_w))
-    ] + list(args) + [outputfile]
+def _transcode_cmd(jobid, binpath, filename, args, outputfile, progress_p_w, run, two_pass=False):
+    if(two_pass):
+        if(run == 1):
+            if os.name == "posix":
+                output = "/dev/null"
+            if os.name == "nt":
+                output = "NUL"
+            cmd = [
+                binpath, "-i", filename, "-nostdin", "-pass", str(1), "-y", 
+                "-passlogfile", str(jobid), "-f", "webm"
+            ] + list(args) + [output]
+        elif(run == 2):
+            cmd = [
+                binpath, "-i", filename, "-nostdin", "-progress",
+                str("pipe:" + str(progress_p_w)), "-pass", str(2),
+                "-passlogfile", str(jobid)
+            ] + list(args) + [outputfile]
+    else:
+        cmd = [
+            binpath, "-i", filename, "-nostdin", "-progress",
+            str("pipe:" + str(progress_p_w))
+        ] + list(args) + [outputfile]
     print(" ".join(cmd))
     return cmd
 
 
 # Start transcode
-def transcode_start(binpath, filename, args, outputfile, ffprobepath):
+def transcode_start(jobid, binpath, filename, args, outputfile, ffprobepath, two_pass):
     frame_num[filename] = enc.video_frames(ffprobepath, filename)
+    if(two_pass):
+        cmd = _transcode_cmd(jobid, binpath, filename, args, outputfile, 0, 1, two_pass)
+        firstpass = subprocess.run(
+            cmd,
+            text=True,
+            capture_output=True,
+        )
     ffreport = {"FFREPORT": f"file={outputfile[0: -3]}report"}
     ffenv = {**os.environ, **ffreport}
     fdr, fdw = os.pipe()
     if os.name == "posix":
-        cmd = _transcode_cmd(binpath, filename, args, outputfile, fdw)
+        cmd = _transcode_cmd(jobid, binpath, filename, args, outputfile, fdw, 2, two_pass)
         process = subprocess.Popen(
             cmd,
             pass_fds=[fdw],
@@ -64,7 +88,7 @@ def transcode_start(binpath, filename, args, outputfile, ffprobepath):
         # https://bugs.python.org/issue32865
         # https://github.com/python/cpython/pull/13739
         #
-        cmd = _transcode_cmd(binpath, filename, args, outputfile, fdw_dup)
+        cmd = _transcode_cmd(jobid, binpath, filename, args, outputfile, fdw_dup, 2, two_pass)
         process = subprocess.Popen(
             cmd,
             text=True,

@@ -55,11 +55,13 @@ class Transcode_setting(object):
                  transcode_plugin: str,
                  binary: str,
                  options,
-                 concurrent: int = 0):
+                 concurrent: int = 0,
+                 two_pass: bool = False):
         self.transcode_plugin = transcode_plugin
         self.binary = binary
         self.options = options
         self.concurrent = concurrent
+        self.two_pass = two_pass
 
     def __call__(self):
         """ Make an 2D Numpy array with arguments for transcode.
@@ -322,7 +324,7 @@ def transcode_args(binaries, mod, transcode_set, videofiles, output_path):
             print(outputfile)
             args_in.append(
                 (next(jobid), mod, transcode_set.binary, inputfile,
-                 list(transcode_args), outputfile, binaries["ffprobe"]))
+                 list(transcode_args), outputfile, binaries["ffprobe"], transcode_set.two_pass))
     return args_in
 
 
@@ -490,7 +492,7 @@ def transcode(binaries, videofiles, transcode_set, output_path):
 
 
 def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
-                       ffprobepath):
+                       ffprobepath, two_pass):
     """ Make transcode.
 
     Args:
@@ -505,8 +507,8 @@ def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
         jobid: job id
         process.returncode: Return code of transcode.
     """
-    process, fdr, fdw = mod.transcode_start(binary, inputfile, transcode_opt,
-                                            outputfile, ffprobepath)
+    process, fdr, fdw = mod.transcode_start(jobid, binary, inputfile, transcode_opt,
+                                            outputfile, ffprobepath, two_pass)
     print("job started.")
     transcodeGetInfo = threading.Thread(target=mod.transcode_get_info,
                                         args=(jobid, process, fdr))
