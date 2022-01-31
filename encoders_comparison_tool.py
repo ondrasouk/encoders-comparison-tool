@@ -318,6 +318,7 @@ def transcode_args(binaries, mod, transcode_set, videofiles, output_path):
                     transcode_args[param_value[next(x)]])
             outputfile = str(filebasename + param)
             for ch in ['\\', '/', '|', '*', '"', '?', ':', '<', '>']:
+                # erase forbidden characters in file names
                 if ch in outputfile:
                     outputfile = outputfile.replace(ch, "")
             outputfile = str(output_path + outputfile + ".mkv")
@@ -470,7 +471,9 @@ def transcode(binaries, videofiles, transcode_set, output_path):
         'progress': 'waiting',
         'progress_perc': '0.00'
     }
-    for i in range(len(args_in) - 1):  # job_id starts from 0
+    status = np.array[not_started_job_status.copy()]
+    for i in range(len(args_in) - 2):
+        # job_id starts from 0 and first is already assigned
         status = np.append(status, not_started_job_status.copy())
 
     if transcode_set.concurrent == 0:
