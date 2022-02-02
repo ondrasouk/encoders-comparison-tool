@@ -26,6 +26,7 @@ class bcolors:
 videofiles_frame_num = {}
 videofiles_duration = {}
 videofiles_framerate = {}
+videofiles_resolution = {}
 
 # Index corresponds to job_id.
 status = np.array([{}])
@@ -329,110 +330,6 @@ def transcode_args(binaries, mod, transcode_set, videofiles, output_path):
     return args_in
 
 
-# Functions for getting the video info.
-
-
-def video_length_seconds(binaries, videofile_path):
-    """ Get length of video in seconds.
-
-    Args:
-        binaries: Dictionary with binaries and their path.
-        videofile_path: Path to video file.
-
-    Returns: Length of video in seconds.
-    """
-    if type(binaries) == str:
-        ffprobepath = binaries
-    elif type(binaries) == dict:
-        ffprobepath = binaries["ffprobe"]
-    else:
-        raise TypeError(
-            "Passed binary can only be in format string or dictionary")
-
-    global videofiles_duration
-    try:
-        duration = videofiles_duration[videofile_path]
-        return duration
-    except KeyError:
-        result = subprocess.run(
-            [
-                ffprobepath,
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                videofile_path,
-            ],
-            capture_output=True,
-            text=True,
-        )
-        try:
-            return float(result.stdout)
-        except ValueError:
-            raise ValueError(result.stderr.rstrip("\n"))
-
-
-def video_framerate(binaries, videofile_path):
-    """ Get framerate of video in seconds.
-
-    Args:
-        binaries: Dictionary with binaries and their path.
-        videofile_path: Path to video file.
-
-    Returns: Framerate of video.
-    """
-    if type(binaries) == str:
-        ffprobepath = binaries
-    elif type(binaries) == dict:
-        ffprobepath = binaries["ffprobe"]
-    else:
-        raise TypeError(
-            "Passed binary can only be in format string or dictionary")
-
-    global videofiles_duration
-    try:
-        framerate = videofiles_framerate[videofile_path]
-        return framerate
-    except KeyError:
-        result = subprocess.run(
-            [
-                ffprobepath,
-                "-v",
-                "error",
-                "-show_entries",
-                "stream=r_frame_rate",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                videofile_path,
-            ],
-            capture_output=True,
-            text=True,
-        )
-        try:
-            framerate_str = str(result.stdout.split("\n")[0])
-            framerate = int(framerate_str.split("/")[0]) / int(
-                framerate_str.split("/")[1])
-            return framerate
-        except ValueError:
-            raise ValueError(result.stderr.rstrip("\n"))
-
-
-def video_frames(binaries, videofile_path):
-    """ Calculate number of frames of video.
-
-    Args:
-        binaries: Dictionary with binaries and their path.
-        videofile_path: Path to video file.
-
-    Returns: Number of frames of video.
-    """
-    return int(
-        video_framerate(binaries, videofile_path) *
-        video_length_seconds(binaries, videofile_path))
-
-
 ###########################################################
 # Code for transcoding
 ###########################################################
@@ -633,3 +530,196 @@ def transcode_check(binaries,
                                                   inputfile, arg, binaries,
                                                   mode))
     return all(v == 0 for v in returncodes)
+
+
+# Functions for getting the video info.
+
+
+def video_length_seconds(binaries, videofile_path):
+    """ Get length of video in seconds.
+
+    Args:
+        binaries: Dictionary with binaries and their path.
+        videofile_path: Path to video file.
+
+    Returns: Length of video in seconds.
+    """
+    if type(binaries) == str:
+        ffprobepath = binaries
+    elif type(binaries) == dict:
+        ffprobepath = binaries["ffprobe"]
+    else:
+        raise TypeError(
+            "Passed binary can only be in format string or dictionary")
+
+    global videofiles_duration
+    try:
+        duration = videofiles_duration[videofile_path]
+        return duration
+    except KeyError:
+        result = subprocess.run(
+            [
+                ffprobepath,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                videofile_path,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        try:
+            videofiles_duration[videofile_path] = float(result.stdout)
+            return float(result.stdout)
+        except ValueError:
+            raise ValueError(result.stderr.rstrip("\n"))
+
+
+def video_framerate(binaries, videofile_path):
+    """ Get framerate of video in seconds.
+
+    Args:
+        binaries: Dictionary with binaries and their path or string with path
+                  to ffprobe.
+        videofile_path: Path to video file.
+
+    Returns: Framerate of video.
+    """
+    if type(binaries) == str:
+        ffprobepath = binaries
+    elif type(binaries) == dict:
+        ffprobepath = binaries["ffprobe"]
+    else:
+        raise TypeError(
+            "Passed binary can only be in format string or dictionary")
+
+    global videofiles_duration
+    try:
+        framerate = videofiles_framerate[videofile_path]
+        return framerate
+    except KeyError:
+        result = subprocess.run(
+            [
+                ffprobepath,
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=r_frame_rate",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                videofile_path,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        try:
+            framerate_str = str(result.stdout.split("\n")[0])
+            framerate = int(framerate_str.split("/")[0]) / int(
+                framerate_str.split("/")[1])
+            videofiles_framerate[videofile_path] = framerate
+            return framerate
+        except ValueError:
+            raise ValueError(result.stderr.rstrip("\n"))
+
+
+def video_frames(binaries, videofile_path):
+    """ Calculate number of frames of video.
+
+    Args:
+        binaries: Dictionary with binaries and their path or string with path
+                  to ffprobe.
+        videofile_path: Path to video file.
+
+    Returns: Number of frames of video.
+    """
+    return int(
+        video_framerate(binaries, videofile_path) *
+        video_length_seconds(binaries, videofile_path))
+
+
+def video_stream_size(binaries, videofile_path):
+    """ Get size of video in KB.
+
+    Args:
+        binaries: Dictionary with binaries and their path or string with path
+                  to ffmpeg.
+        videofile_path: Path to video file.
+
+    Returns: Size of stream in KB.
+    """
+    if type(binaries) == str:
+        ffprobepath = binaries
+    elif type(binaries) == dict:
+        ffprobepath = binaries["ffmpeg"]
+    else:
+        raise TypeError(
+            "Passed binary can only be in format string or dictionary")
+
+    result = subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-i", videofile_path,
+            "-map", "0:v:0",
+            "-c", "copy",
+            "-f", "null", "-"
+        ],
+        capture_output=True,
+        text=True,
+    )
+    try:
+        size = (result.stderr.rsplit("\n")[-2].rsplit(" ")[0].rsplit(":")[1][0: -2])
+        return float(size)
+    except ValueError:
+        raise ValueError(result.stderr.rstrip("\n"))
+
+
+def video_dimensions(binaries, videofile_path):
+    """ Get framerate of video in seconds.
+
+    Args:
+        binaries: Dictionary with binaries and their path or string with path
+                  to ffprobe.
+        videofile_path: Path to video file.
+
+    Returns: Framerate of video.
+    """
+    if type(binaries) == str:
+        ffprobepath = binaries
+    elif type(binaries) == dict:
+        ffprobepath = binaries["ffprobe"]
+    else:
+        raise TypeError(
+            "Passed binary can only be in format string or dictionary")
+
+    global videofiles_resolution
+    try:
+        resolution = videofiles_resolution[videofile_path]
+        return resolution
+    except KeyError:
+        result = subprocess.run(
+            [
+                ffprobepath,
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=s=x:p=0",
+                videofile_path,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        try:
+            resolution_str = str(result.stdout.split("\n")[0])
+            resolution = [int(resolution_str.split("x")[0]), int(resolution_str.split("x")[1])]
+            videofiles_resolution[videofile_path] = resolution_str
+            return resolution_str
+        except ValueError:
+            raise ValueError(result.stderr.rstrip("\n"))

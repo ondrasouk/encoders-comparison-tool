@@ -31,10 +31,12 @@ transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode
 # Dictionary for storing paths for binaries.
 binaries = {
     "ffprobe": "/usr/bin/ffprobe"
+    "ffmpeg": "/usr/bin/ffmpeg"
     }
 # Settings for Windows testing.
 if os.name == "nt":
     binaries["ffprobe"] = "ffmpeg-n4.4.1-2-gcc33e73618-win64-gpl-4.4/bin/ffprobe.exe"
+    binaries["ffmpeg"] = "ffmpeg-n4.4.1-2-gcc33e73618-win64-gpl-4.4/bin/ffmpeg.exe"
     for settings in transcode_set:
         settings.binary = "ffmpeg-n4.4.1-2-gcc33e73618-win64-gpl-4.4/bin/ffmpeg.exe"
 # Input video files can be stored as strings in iterable
