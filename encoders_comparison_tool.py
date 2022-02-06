@@ -288,7 +288,7 @@ def count(n=0):
         n += 1
 
 
-def transcode_args(binaries, mod, transcode_set, videofiles, output_path):
+def transcode_args(binaries, transcode_set, videofiles, output_path):
     """ Make arguments list for batch.
 
     Args:
@@ -311,7 +311,7 @@ def transcode_args(binaries, mod, transcode_set, videofiles, output_path):
         param = ""
         x = count()
         if param_name == []:
-            args_in.append((next(jobid), mod, transcode_set.binary, inputfile,
+            args_in.append((next(jobid), transcode_set.binary, inputfile,
                             transcode_args, outputfile, binaries["ffprobe"]))
         else:
             for opt in param_name:
@@ -325,7 +325,7 @@ def transcode_args(binaries, mod, transcode_set, videofiles, output_path):
             outputfile = str(output_path + outputfile + ".mkv")
             print(outputfile)
             args_in.append(
-                (next(jobid), mod, transcode_set.binary, inputfile,
+                (next(jobid), transcode_set.binary, inputfile,
                  list(transcode_args), outputfile, binaries["ffprobe"], transcode_set.two_pass))
     return args_in
 
@@ -354,8 +354,7 @@ def transcode(binaries, videofiles, transcode_set, output_path):
         print(f"{video} framerate: {video_framerate(binaries, video)}")
         print(f"{video} calculated framecount: {video_frames(binaries, video)}")
 
-    args_in = transcode_args(binaries, mod, transcode_set, videofiles,
-                             output_path)
+    args_in = transcode_args(binaries, transcode_set, videofiles, output_path)
     print(args_in)
 
     global status
@@ -366,10 +365,11 @@ def transcode(binaries, videofiles, transcode_set, output_path):
         'out_time': '00:00:00.000000',
         'speed': '0.00x',
         'progress': 'waiting',
-        'progress_perc': '0.00'
+        'progress_perc': '0.00',
+        'state': 'waiting'  # for indicating two-pass and other processing
     }
-    status = np.array[not_started_job_status.copy()]
-    for i in range(len(args_in) - 2):
+    status = np.array([not_started_job_status.copy()])
+    for i in range(len(args_in) - 1):
         # job_id starts from 0 and first is already assigned
         status = np.append(status, not_started_job_status.copy())
 
@@ -385,78 +385,41 @@ def transcode(binaries, videofiles, transcode_set, output_path):
     with cf.ThreadPoolExecutor(max_workers=concurrency,
                                thread_name_prefix='job') as pool:
         futures = tuple(
-            pool.submit(transcode_job_wrap, *args) for args in tuple(args_in))
+            pool.submit(mod.transcode_start, *args) for args in tuple(args_in))
 
     for future in futures:
         print(f"Exceptions on job {future.result()[0]}: {future.exception()}")
 
 
-def transcode_job_wrap(jobid, mod, binary, inputfile, transcode_opt, outputfile,
-                       ffprobepath, two_pass):
-    """ Make transcode.
+def transcode_status_update_callback(jobid, stat):
+    """ Callback from module to update status.
 
     Args:
         jobid: job id
-        mod: Importlib module object.
-        binary: Path to executable useb by module.
-        inputfile: Path to video file.
-        transcode_opt: Options for transcode.
-        outputfile: Path where transcoded video will be outputed.
-
-    Returns:
-        jobid: job id
-        process.returncode: Return code of transcode.
+        stat: status to commit to global variable
     """
-    process, fdr, fdw = mod.transcode_start(jobid, binary, inputfile, transcode_opt,
-                                            outputfile, ffprobepath, two_pass)
-    print("job started.")
-    transcodeGetInfo = threading.Thread(target=mod.transcode_get_info,
-                                        args=(jobid, process, fdr))
-    transcodeGetInfo.start()
-    print("Monitor Thread starting.")
-    while process.poll() is None:
-        line = process.stdout.readline().rstrip("\n")
-        # Read from stdout, because Windows has blocking pipes.
-        # TODO For GUI usage there must be callback
-    process.wait()
-    if transcodeGetInfo.is_alive():
-        time.sleep(0.1)
-        if transcodeGetInfo.is_alive():
-            try:
-                print(
-                    f"{bcolors.FAIL}Hanged transcode_get_info on {jobid}. Cleaning.{bcolors.ENDC}"
-                )
-                mod.transcode_get_info_stop(fdr, fdw)
-            except AttributeError:
-                print(
-                    f"{bcolors.WARNING}Not implemented external stop.\nWaiting for thread to timeout.{bcolors.ENDC}"
-                )
-            finally:
-                transcodeGetInfo.join(timeout=2)
-    else:
-        mod.transcode_clean(fdw)
-    if (process.returncode > 0):
-        raise ValueError(
-            "command: {}\n failed with returncode: {}\nProgram output:\n{}".
-            format(" ".join(process.args), process.returncode,
-                   process.stdout.read()))
-    return jobid, process.returncode
-
-
-def transcode_callback(jobid, stat):
-    """ Make transcode.
-
-    Args:
-        jobid: job id
-        stat: status global variable
-    """
-    status[jobid][stat[0]] = stat[1]
+    try:
+        status[jobid][stat[0]] = stat[1]
+    except IndexError:
+        print(f"IndexError: {stat}")
     if stat[0] == "progress":
         try:
             for i in range(len(status)):
-                print(f"job id {i} progress: {status[i]['progress_perc']}%")
+                print(f"job id {i}, state: {status[i]['state']}, progress: {status[i]['progress_perc']}%")
         except KeyError:
             pass
+
+
+def transcode_stdout_update_callback(jobid, line):
+    """ Callback from module to update stdout.
+
+    Args:
+        jobid: job id
+        line: last line from stdout.
+    """
+    pass
+    # Read from stdout, because Windows has blocking pipes.
+    # TODO For GUI usage there must be callback
 
 
 def transcode_check(binaries,

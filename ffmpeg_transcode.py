@@ -1,7 +1,14 @@
 import os
 import re
 import subprocess
+import threading
+import numpy as np
 import encoders_comparison_tool as enc
+
+
+OUTPUT_UNSUPORTED_BY_FFMPEG = False
+INPUT_FILE_TYPE = ("mkv", "yuv", "y4m")
+OUTPUT_FILE_TYPE = "mkv"
 
 
 # Colors in terminal
@@ -30,9 +37,9 @@ def _transcode_cmd(jobid, binpath, filename, args, outputfile, progress_p_w, run
             if os.name == "nt":
                 output = "NUL"
             cmd = [
-                binpath, "-i", filename, "-nostdin", "-pass", str(1), "-y", 
-                "-passlogfile", str(jobid), "-f", "webm"
-            ] + list(args) + [output]
+                binpath, "-i", filename, "-nostdin", "-pass", str(1), "-y",
+                "-progress", str("pipe:" + str(progress_p_w)), "-passlogfile",
+                str(jobid)] + list(args) + ["-f", "null", output]
         elif(run == 2):
             cmd = [
                 binpath, "-i", filename, "-nostdin", "-progress",
@@ -49,20 +56,11 @@ def _transcode_cmd(jobid, binpath, filename, args, outputfile, progress_p_w, run
 
 
 # Start transcode
-def transcode_start(jobid, binpath, filename, args, outputfile, ffprobepath, two_pass):
-    frame_num[filename] = enc.video_frames(ffprobepath, filename)
-    if(two_pass):
-        cmd = _transcode_cmd(jobid, binpath, filename, args, outputfile, 0, 1, two_pass)
-        firstpass = subprocess.run(
-            cmd,
-            text=True,
-            capture_output=True,
-        )
-    ffreport = {"FFREPORT": f"file={outputfile[0: -3]}report"}
-    ffenv = {**os.environ, **ffreport}
+def _transcode(jobid, binpath, filename, args, outputfile, ffreport, run, two_pass):
+    ffenv = {**os.environ, **ffreport}  # Add aditional enviroment variables
     fdr, fdw = os.pipe()
     if os.name == "posix":
-        cmd = _transcode_cmd(jobid, binpath, filename, args, outputfile, fdw, 2, two_pass)
+        cmd = _transcode_cmd(jobid, binpath, filename, args, outputfile, fdw, run, two_pass)
         process = subprocess.Popen(
             cmd,
             pass_fds=[fdw],
@@ -88,7 +86,7 @@ def transcode_start(jobid, binpath, filename, args, outputfile, ffprobepath, two
         # https://bugs.python.org/issue32865
         # https://github.com/python/cpython/pull/13739
         #
-        cmd = _transcode_cmd(jobid, binpath, filename, args, outputfile, fdw_dup, 2, two_pass)
+        cmd = _transcode_cmd(jobid, binpath, filename, args, outputfile, fdw_dup, run, two_pass)
         process = subprocess.Popen(
             cmd,
             text=True,
@@ -102,6 +100,66 @@ def transcode_start(jobid, binpath, filename, args, outputfile, ffprobepath, two
     # Return into encoders_comparison_tool because the freezed libraries
     # (loaded with importlib) can't make a new thread or process.
     return process, fdr, fdw
+
+
+# Start transcode
+def transcode_start(jobid, binpath, filename, args, outputfile, ffprobepath, two_pass):
+    frame_num[filename] = enc.video_frames(ffprobepath, filename)
+    if two_pass:
+        ffreport = {"FFREPORT": f"file={outputfile[0: -3]}report"}  # TODO make it better
+        enc.transcode_status_update_callback(jobid, ["state", "first pass"])
+        firstpass, fdr, fdw = _transcode(jobid, binpath, filename, args, outputfile, ffreport, 1, two_pass)
+        transcodeGetInfo = threading.Thread(target=transcode_get_info,
+                                            args=(jobid, firstpass, fdr))
+        transcodeGetInfo.start()
+        while firstpass.poll() is None:
+            line = firstpass.stdout.readline().rstrip("\n")
+            enc.transcode_stdout_update_callback(jobid, line)
+        firstpass.wait()
+        transcodeGetInfo.join(timeout=1)
+        transcode_clean(fdw)
+        if (firstpass.returncode > 0):
+            raise ValueError(
+                "command: {}\n failed with returncode: {}\nProgram output:\n{}"
+                .format(" ".join(firstpass.args), firstpass.returncode,
+                        firstpass.stdout.read()))
+
+        ffreport = {"FFREPORT": f"file={outputfile[0: -3]}report"}  # TODO make it better
+        enc.transcode_status_update_callback(jobid, ["state", "second pass"])
+        process, fdr, fdw = _transcode(jobid, binpath, filename, args, outputfile, ffreport, 2, two_pass)
+        transcodeGetInfo = threading.Thread(target=transcode_get_info,
+                                            args=(jobid, process, fdr))
+        transcodeGetInfo.start()
+        while process.poll() is None:
+            line = process.stdout.readline().rstrip("\n")
+            enc.transcode_stdout_update_callback(jobid, line)
+        process.wait()
+        transcodeGetInfo.join(timeout=1)
+        transcode_clean(fdw)
+        if (process.returncode > 0):
+            raise ValueError(
+                "command: {}\n failed with returncode: {}\nProgram output:\n{}"
+                .format(" ".join(process.args), process.returncode,
+                        process.stdout.read()))
+    else:
+        ffreport = {"FFREPORT": f"file={outputfile[0: -3]}report"}  # TODO make it better
+        enc.transcode_status_update_callback(jobid, ["state", "running"])
+        process, fdr, fdw = _transcode(jobid, binpath, filename, args, outputfile, ffreport, 1, two_pass)
+        transcodeGetInfo = threading.Thread(target=transcode_get_info,
+                                            args=(jobid, process, fdr))
+        transcodeGetInfo.start()
+        while process.poll() is None:
+            line = process.stdout.readline().rstrip("\n")
+            enc.transcode_stdout_update_callback(jobid, line)
+        process.wait()
+        transcodeGetInfo.join(timeout=1)
+        transcode_clean(fdw)
+        if (process.returncode > 0):
+            raise ValueError(
+                "command: {}\n failed with returncode: {}\nProgram output:\n{}"
+                .format(" ".join(process.args), process.returncode,
+                        process.stdout.read()))
+    return jobid, process.returncode
 
 
 # Clean after transcode ended.
@@ -134,11 +192,11 @@ def transcode_get_info(jobid, process, fdr):
             calc = ["progress_perc", ""]
             calc[1] = format((int(stat[1]) / frame_num[process.args[2]]) * 100,
                              '.2f')
-            enc.transcode_callback(jobid, calc)
+            enc.transcode_status_update_callback(jobid, calc)
         if line == "progress=end\n":
             calc[1] = "100.00"
-            enc.transcode_callback(jobid, calc)
-        enc.transcode_callback(jobid, stat)
+            enc.transcode_status_update_callback(jobid, calc)
+        enc.transcode_status_update_callback(jobid, stat)
         if line == "progress=end\n":
             break
 

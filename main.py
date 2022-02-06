@@ -27,10 +27,10 @@ options2 = np.array([["-c:v", "libx264"],
 transcode_set = []
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options))
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options1, concurrent=-1))
-transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options2, concurrent=1))
+transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options2, concurrent=1, two_pass=True))
 # Dictionary for storing paths for binaries.
 binaries = {
-    "ffprobe": "/usr/bin/ffprobe"
+    "ffprobe": "/usr/bin/ffprobe",
     "ffmpeg": "/usr/bin/ffmpeg"
     }
 # Settings for Windows testing.
@@ -39,12 +39,9 @@ if os.name == "nt":
     binaries["ffmpeg"] = "ffmpeg-n4.4.1-2-gcc33e73618-win64-gpl-4.4/bin/ffmpeg.exe"
     for settings in transcode_set:
         settings.binary = "ffmpeg-n4.4.1-2-gcc33e73618-win64-gpl-4.4/bin/ffmpeg.exe"
-# Input video files can be stored as strings in iterable
-# object (list, touples, generators, ...)
-fileprefix = ""
-filesuffix = ".mkv"
-inputfiles_gen = (fileprefix + (str(x) + filesuffix) for x in range(1, 2))
-inputfiles_list = ["Sintel.2010.720p_30s.mkv", "1.mkv", "2.mkv"]
+
+# Input video files can be stored as strings in iterable object
+inputfiles_list = ["Sintel.2010.720p_30s.mkv"]
 
 # Output directory for encoded videosequences
 outputpath = "out/"
