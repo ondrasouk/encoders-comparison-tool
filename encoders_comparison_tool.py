@@ -350,6 +350,11 @@ class Transcode_job:
 
 
 class PerpetualTimer:
+    """
+    Run code periodically in thread.
+    More info: https://stackoverflow.com/a/40965385
+    """
+
     def __init__(self, interval, function, *args, **kwargs):
         self._timer = None
         self.interval = interval
