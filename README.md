@@ -22,7 +22,7 @@ Tool for batch transcoding video sequences for video encoder comparison.
 
 ## Depencies
 
-FFmpeg (ffmpeg, ffprobe), Python (>= 3.8) and NumPy
+FFmpeg (ffmpeg, ffprobe), Python (>= 3.8), NumPy and psutil
 
 ## Usage
 
