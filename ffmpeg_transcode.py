@@ -2,7 +2,6 @@ import os
 import re
 import subprocess
 import threading
-import numpy as np
 import encoders_comparison_tool as enc
 
 
@@ -97,42 +96,40 @@ def _transcode(jobid, binpath, filename, args, outputfile, ffreport, run, two_pa
         )
     else:
         raise Exception("Use Windows or Posix, other platforms not tested.")
-    # Return into encoders_comparison_tool because the freezed libraries
-    # (loaded with importlib) can't make a new thread or process.
     return process, fdr, fdw
 
 
 # Start transcode
-def transcode_start(jobid, binpath, filename, args, outputfile, ffprobepath, two_pass):
-    frame_num[filename] = enc.video_frames(ffprobepath, filename)
-    if two_pass:
-        ffreport = {"FFREPORT": f"file={outputfile[0: -3]}report"}  # TODO make it better
-        enc.transcode_status_update_callback(jobid, ["state", "first pass"])
-        firstpass, fdr, fdw = _transcode(jobid, binpath, filename, args, outputfile, ffreport, 1, two_pass)
+def transcode_start(job):
+    frame_num[job.inputfile] = enc.video_frames(job.inputfile, job.binaries)
+    if job.two_pass:
+        ffreport = {"FFREPORT": f"file={job.outputfile[0: -3]}report"}  # TODO make it better
+        enc.transcode_status_update_callback(job.job_id, ["state", "first pass"])
+        firstpass, fdr, fdw = _transcode(job.job_id, job.binary, job.inputfile, job.args, job.outputfile, ffreport, 1, job.two_pass)
         transcodeGetInfo = threading.Thread(target=transcode_get_info,
-                                            args=(jobid, firstpass, fdr))
+                                            args=(job.job_id, firstpass, fdr))
         transcodeGetInfo.start()
         while firstpass.poll() is None:
             line = firstpass.stdout.readline().rstrip("\n")
-            enc.transcode_stdout_update_callback(jobid, line)
+            enc.transcode_stdout_update_callback(job.job_id, line)
         firstpass.wait()
         transcodeGetInfo.join(timeout=1)
         transcode_clean(fdw)
         if (firstpass.returncode > 0):
             raise ValueError(
                 "command: {}\n failed with returncode: {}\nProgram output:\n{}"
-                .format(" ".join(firstpass.args), firstpass.returncode,
+                .format(" ".join(firstpass.job.args), firstpass.returncode,
                         firstpass.stdout.read()))
 
-        ffreport = {"FFREPORT": f"file={outputfile[0: -3]}report"}  # TODO make it better
-        enc.transcode_status_update_callback(jobid, ["state", "second pass"])
-        process, fdr, fdw = _transcode(jobid, binpath, filename, args, outputfile, ffreport, 2, two_pass)
+        ffreport = {"FFREPORT": f"file={job.outputfile[0: -3]}report"}  # TODO make it better
+        enc.transcode_status_update_callback(job.job_id, ["state", "second pass"])
+        process, fdr, fdw = _transcode(job.job_id, job.binary, job.inputfile, job.args, job.outputfile, ffreport, 2, job.two_pass)
         transcodeGetInfo = threading.Thread(target=transcode_get_info,
-                                            args=(jobid, process, fdr))
+                                            args=(job.job_id, process, fdr))
         transcodeGetInfo.start()
         while process.poll() is None:
             line = process.stdout.readline().rstrip("\n")
-            enc.transcode_stdout_update_callback(jobid, line)
+            enc.transcode_stdout_update_callback(job.job_id, line)
         process.wait()
         transcodeGetInfo.join(timeout=1)
         transcode_clean(fdw)
@@ -142,15 +139,15 @@ def transcode_start(jobid, binpath, filename, args, outputfile, ffprobepath, two
                 .format(" ".join(process.args), process.returncode,
                         process.stdout.read()))
     else:
-        ffreport = {"FFREPORT": f"file={outputfile[0: -3]}report"}  # TODO make it better
-        enc.transcode_status_update_callback(jobid, ["state", "running"])
-        process, fdr, fdw = _transcode(jobid, binpath, filename, args, outputfile, ffreport, 1, two_pass)
+        ffreport = {"FFREPORT": f"file={job.outputfile[0: -3]}report"}  # TODO make it better
+        enc.transcode_status_update_callback(job.job_id, ["state", "running"])
+        process, fdr, fdw = _transcode(job.job_id, job.binary, job.inputfile, job.args, job.outputfile, ffreport, 1, job.two_pass)
         transcodeGetInfo = threading.Thread(target=transcode_get_info,
-                                            args=(jobid, process, fdr))
+                                            args=(job.job_id, process, fdr))
         transcodeGetInfo.start()
         while process.poll() is None:
             line = process.stdout.readline().rstrip("\n")
-            enc.transcode_stdout_update_callback(jobid, line)
+            enc.transcode_stdout_update_callback(job.job_id, line)
         process.wait()
         transcodeGetInfo.join(timeout=1)
         transcode_clean(fdw)
@@ -159,7 +156,7 @@ def transcode_start(jobid, binpath, filename, args, outputfile, ffprobepath, two
                 "command: {}\n failed with returncode: {}\nProgram output:\n{}"
                 .format(" ".join(process.args), process.returncode,
                         process.stdout.read()))
-    return jobid, process.returncode
+    return job.job_id, process.returncode
 
 
 # Clean after transcode ended.

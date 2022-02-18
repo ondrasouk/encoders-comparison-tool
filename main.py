@@ -21,6 +21,7 @@ options2 = np.array([["-c:v", "libx264"],
                     ["-an"],
                     ["-y"],
                     ["-sn"]], dtype=object)
+options3 = np.array([["-q", enc.sweep_param("add", 32, 32, 1)]], dtype=object)
 # Make transcode_set list (options list).
 # enc.Transcode_setting is class for making transcode options with what module
 # to load and what binary it will use.
@@ -28,6 +29,7 @@ transcode_set = []
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options))
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options1, concurrent=-1))
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options2, concurrent=1, two_pass=True))
+transcode_set = np.append(transcode_set, enc.Transcode_setting("vvenc_transcode.py", ("../vvenc/bin/release-static/vvencapp", "../vvdec/bin/release-static/vvdecapp"), options3, concurrent=1, two_pass=False))
 # Dictionary for storing paths for binaries.
 binaries = {
     "ffprobe": "/usr/bin/ffprobe",
@@ -49,10 +51,10 @@ if os.path.isdir(outputpath) == 0:
     os.mkdir(outputpath)
 
 # Test configuration for errors before running encode
-print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2]))
-print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2], "slow"))
+#print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2]))
+#print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2], "slow"))
 # Print used configuration.
-print(transcode_set[2]())
+print(transcode_set[0]())
 print("\nencoding:\n")
 # Start the transcode.
 enc.transcode(binaries, inputfiles_list, transcode_set[2], outputpath)

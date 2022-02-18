@@ -22,14 +22,17 @@ class bcolors:
 
 # Everything for setting the parameters of video transcode
 
+binaries = {}
 # Videofiles properties. Key is video file path.
 videofiles_frame_num = {}
 videofiles_duration = {}
 videofiles_framerate = {}
 videofiles_resolution = {}
+videofiles_pix_fmt = {}
 
 # Index corresponds to job_id.
-status = np.array([{}])
+#status = np.array([{}])
+job_list = []
 
 
 class Transcode_setting(object):
@@ -177,27 +180,6 @@ class Transcode_setting(object):
         return True
 
 
-class args_iterator(object):
-    """ Make an iterator of videofiles and transcode_set
-
-    Attributes:
-        videofiles: iterable object with inputfile names
-        transcode_set: Transcode_setting object
-    """
-
-    def __init__(self, videofiles, transcode_set):
-        self.videofiles = videofiles
-        self.transcode_set = transcode_set
-
-    def __iter__(self):
-        for inputfile in self.videofiles:
-            if self.transcode_set.ndim == 1:
-                yield inputfile, list(self.transcode_set)
-            else:
-                for transcode_args in self.transcode_set:
-                    yield inputfile, list(transcode_args)
-
-
 class sweep_param(object):
     """ Make callable sweep_param object, returns np.array with sweep values.
 
@@ -288,46 +270,70 @@ def count(n=0):
         n += 1
 
 
-def transcode_args(binaries, transcode_set, videofiles, output_path):
-    """ Make arguments list for batch.
+# TODO
+# unused for now
+"""
+class inputfile_variants(object):
+    def __init__(self):
+        self.variants = []
+        self.inputfiles_variants = {}
+        self.variants_used = {}
+        self.lock = threading.Lock()
 
-    Args:
-        binaries: Dictionary with binaries and their path.
-        mod: Importlib module object.
-        transcode_set: Transcode_setting object.
-        videofiles: Iterable containing path to video files.
-        output_path: Path to folder where transcoded videos will be outputed.
-
-    Returns:
-        args_in: arguments list for batch. See function transcode_job_wrap().
-    """
-    param_name, param_value = transcode_set.param_find()
-    args_in = []
-    jobid = count()
-    transcode_args_iter = args_iterator(videofiles, transcode_set())
-    for inputfile, transcode_args in transcode_args_iter:
+    def request_variant(self, inputfile, file_format, pix_format="", jobid=None):
+        self.lock.acquire()
         filebasename = os.path.splitext(os.path.basename(inputfile))[0]
-        outputfile = str(output_path + filebasename + ".mkv")
-        param = ""
-        x = count()
-        if param_name == []:
-            args_in.append((next(jobid), transcode_set.binary, inputfile,
-                            transcode_args, outputfile, binaries["ffprobe"]))
-        else:
-            for opt in param_name:
-                param = param + opt + "_" + str(
-                    transcode_args[param_value[next(x)]])
-            outputfile = str(filebasename + param)
-            for ch in ['\\', '/', '|', '*', '"', '?', ':', '<', '>']:
-                # erase forbidden characters in file names
-                if ch in outputfile:
-                    outputfile = outputfile.replace(ch, "")
-            outputfile = str(output_path + outputfile + ".mkv")
-            print(outputfile)
-            args_in.append(
-                (next(jobid), transcode_set.binary, inputfile,
-                 list(transcode_args), outputfile, binaries["ffprobe"], transcode_set.two_pass))
-    return args_in
+        outputfile = filebasename + "_" + pix_format + "." + file_format
+        if outputfile in self.variants:
+            self.variants_used["outputfile"] = self.variants_used["outputfile"] + 1
+            if file_format == "yuv":
+                return outputfile, video_get_info_for_yuv()
+            else:
+                return outputfile
+
+        spec = util.spec_from_file_location("mod", "ffmpeg_transcode.py")
+        mod = util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        if file_format == "yuv":
+            pass
+        self.lock.release()
+        return outputfile
+
+    def free_variant(self, variant_path):
+        self.lock.acquire()
+        self.lock.release()
+
+    def clean_variants(self):
+        self.lock.acquire()
+        self.lock.release()
+"""
+
+
+class Transcode_job:
+    def __init__(self, transcode_set, job_id, mod, args, inputfile, outputfile, binaries):
+        self.transcode_set = transcode_set
+        self.binary = transcode_set.binary
+        self.job_id = job_id
+        self.mod = mod
+        self.args = args
+        self.inputfile = inputfile
+        self.outputfile = outputfile
+        self.encodedfile = None
+        self.two_pass = transcode_set.two_pass
+        self.binaries = binaries
+        self.finished = None
+        self.status = {
+            'frame': '0',
+            'fps': '0.00',
+            'total_size': '0',
+            'out_time': '00:00:00.000000',
+            'speed': '0.00x',
+            'progress': 'waiting',
+            'progress_perc': '0.00',
+            'state': 'waiting'  # for indicating two-pass and other processing
+        }
+        self.PID = None
+        self.cpu_useage = None
 
 
 ###########################################################
@@ -335,43 +341,46 @@ def transcode_args(binaries, transcode_set, videofiles, output_path):
 ###########################################################
 
 
-def transcode(binaries, videofiles, transcode_set, output_path):
+def transcode(binaries_ent, videofiles, transcode_set, output_path):
     """ Make batch transcode.
 
     Args:
-        binaries: Dictionary with binaries and their path.
+        binaries_ent: Dictionary with binaries and their path.
         videofiles: Iterable containing path to video files.
         transcode_set: Transcode_setting object.
         output_path: Path to folder where transcoded videos will be outputed.
     """
+    global binaries
+    binaries = binaries_ent.copy()
     print(f"Dynamically loading source file: {transcode_set.transcode_plugin}")
     spec = util.spec_from_file_location("mod", transcode_set.transcode_plugin)
     mod = util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     print("Module loaded succesfully!")
     for video in videofiles:
-        print(f"{video} duration: {video_length_seconds(binaries, video)}")
-        print(f"{video} framerate: {video_framerate(binaries, video)}")
-        print(f"{video} calculated framecount: {video_frames(binaries, video)}")
+        print(f"{video} duration: {video_length_seconds(video)}")
+        print(f"{video} framerate: {video_framerate(video)}")
+        print(f"{video} calculated framecount: {video_frames(video)}")
 
-    args_in = transcode_args(binaries, transcode_set, videofiles, output_path)
-    print(args_in)
-
-    global status
-    not_started_job_status = {
-        'frame': '0',
-        'fps': '0.00',
-        'total_size': '0',
-        'out_time': '00:00:00.000000',
-        'speed': '0.00x',
-        'progress': 'waiting',
-        'progress_perc': '0.00',
-        'state': 'waiting'  # for indicating two-pass and other processing
-    }
-    status = np.array([not_started_job_status.copy()])
-    for i in range(len(args_in) - 1):
-        # job_id starts from 0 and first is already assigned
-        status = np.append(status, not_started_job_status.copy())
+    param_name, param_value = transcode_set.param_find()
+    global job_list
+    for videofile, args in [[videofile, args] for videofile in videofiles for args in transcode_set()]:
+        filebasename = os.path.splitext(os.path.basename(videofile))[0]
+        param = ""
+        x = count()
+        if param_name == []:
+            outputfile = str(output_path + filebasename + ".mkv")
+        else:
+            for opt in param_name:
+                param = param + opt + "_" + str(
+                    args[param_value[next(x)]])
+            outputfile = str(filebasename + param)
+            for ch in ['\\', '/', '|', '*', '"', '?', ':', '<', '>']:
+                # erase forbidden characters in file names
+                if ch in outputfile:
+                    outputfile = outputfile.replace(ch, "")
+            outputfile = str(output_path + outputfile + ".mkv")
+        job_list.append(Transcode_job(transcode_set, len(job_list), mod, args, videofile, outputfile, binaries_ent))
 
     if transcode_set.concurrent == 0:
         concurrency = 1
@@ -385,7 +394,7 @@ def transcode(binaries, videofiles, transcode_set, output_path):
     with cf.ThreadPoolExecutor(max_workers=concurrency,
                                thread_name_prefix='job') as pool:
         futures = tuple(
-            pool.submit(mod.transcode_start, *args) for args in tuple(args_in))
+            pool.submit(mod.transcode_start, job) for job in job_list)
 
     for future in futures:
         print(f"Exceptions on job {future.result()[0]}: {future.exception()}")
@@ -399,13 +408,13 @@ def transcode_status_update_callback(jobid, stat):
         stat: status to commit to global variable
     """
     try:
-        status[jobid][stat[0]] = stat[1]
+        job_list[jobid].status[stat[0]] = stat[1]
     except IndexError:
         print(f"IndexError: {stat}")
     if stat[0] == "progress":
         try:
-            for i in range(len(status)):
-                print(f"job id {i}, state: {status[i]['state']}, progress: {status[i]['progress_perc']}%")
+            for i in range(len(job_list)):
+                print(f"job id {i}, state: {job_list[i].status['state']}, progress: {job_list[i].status['progress_perc']}%")
         except KeyError:
             pass
 
@@ -422,7 +431,7 @@ def transcode_stdout_update_callback(jobid, line):
     # TODO For GUI usage there must be callback
 
 
-def transcode_check(binaries,
+def transcode_check(binaries_ent,
                     videofiles,
                     transcode_set,
                     mode="quick",
@@ -432,7 +441,7 @@ def transcode_check(binaries,
     Primary usage is for GUI.
 
     Args:
-        binaries: Dictionary with binaries and their path.
+        binaries_ent: Dictionary with binaries and their path.
         videofiles: Iterable containing path to video files.
         transcode_set: Transcode_setting object.
         mode: Values: 'quick' or 'slow'
@@ -484,13 +493,13 @@ def transcode_check(binaries,
         for arg in args:
             returncodes.append(
                 mod.transcode_check_arguments(transcode_set.binary, "", arg,
-                                              binaries, mode))
+                                              binaries_ent, mode))
     else:
         for inputfile in videofiles:
             for arg in args:
                 returncodes.append(
                     mod.transcode_check_arguments(transcode_set.binary,
-                                                  inputfile, arg, binaries,
+                                                  inputfile, arg, binaries_ent,
                                                   mode))
     return all(v == 0 for v in returncodes)
 
@@ -498,19 +507,22 @@ def transcode_check(binaries,
 # Functions for getting the video info.
 
 
-def video_length_seconds(binaries, videofile_path):
+def video_length_seconds(videofile_path, binaries_ent=None):
     """ Get length of video in seconds.
 
     Args:
-        binaries: Dictionary with binaries and their path.
+        binaries_ent: Dictionary with binaries and their path.
         videofile_path: Path to video file.
 
     Returns: Length of video in seconds.
     """
-    if type(binaries) == str:
-        ffprobepath = binaries
-    elif type(binaries) == dict:
+    if binaries_ent is None:
+        global binaries
         ffprobepath = binaries["ffprobe"]
+    elif type(binaries_ent) == str:
+        ffprobepath = binaries_ent
+    elif type(binaries_ent) == dict:
+        ffprobepath = binaries_ent["ffprobe"]
     else:
         raise TypeError(
             "Passed binary can only be in format string or dictionary")
@@ -541,20 +553,23 @@ def video_length_seconds(binaries, videofile_path):
             raise ValueError(result.stderr.rstrip("\n"))
 
 
-def video_framerate(binaries, videofile_path):
+def video_framerate(videofile_path, binaries_ent=None):
     """ Get framerate of video in seconds.
 
     Args:
-        binaries: Dictionary with binaries and their path or string with path
+        binaries_ent: Dictionary with binaries and their path or string with path
                   to ffprobe.
         videofile_path: Path to video file.
 
     Returns: Framerate of video.
     """
-    if type(binaries) == str:
-        ffprobepath = binaries
-    elif type(binaries) == dict:
+    if binaries_ent is None:
+        global binaries
         ffprobepath = binaries["ffprobe"]
+    elif type(binaries_ent) == str:
+        ffprobepath = binaries_ent
+    elif type(binaries_ent) == dict:
+        ffprobepath = binaries_ent["ffprobe"]
     else:
         raise TypeError(
             "Passed binary can only be in format string or dictionary")
@@ -588,42 +603,45 @@ def video_framerate(binaries, videofile_path):
             raise ValueError(result.stderr.rstrip("\n"))
 
 
-def video_frames(binaries, videofile_path):
+def video_frames(videofile_path, binaries_ent=None):
     """ Calculate number of frames of video.
 
     Args:
-        binaries: Dictionary with binaries and their path or string with path
+        binaries_ent: Dictionary with binaries and their path or string with path
                   to ffprobe.
         videofile_path: Path to video file.
 
     Returns: Number of frames of video.
     """
     return int(
-        video_framerate(binaries, videofile_path) *
-        video_length_seconds(binaries, videofile_path))
+        video_framerate(videofile_path, binaries_ent) *
+        video_length_seconds(videofile_path, binaries_ent))
 
 
-def video_stream_size(binaries, videofile_path):
+def video_stream_size(videofile_path, binaries_ent=None):
     """ Get size of video in KB.
 
     Args:
-        binaries: Dictionary with binaries and their path or string with path
+        binaries_ent: Dictionary with binaries and their path or string with path
                   to ffmpeg.
         videofile_path: Path to video file.
 
     Returns: Size of stream in KB.
     """
-    if type(binaries) == str:
-        ffprobepath = binaries
-    elif type(binaries) == dict:
-        ffprobepath = binaries["ffmpeg"]
+    if binaries_ent is None:
+        global binaries
+        ffmpegpath = binaries["ffprobe"]
+    elif type(binaries_ent) == str:
+        ffmpegpath = binaries_ent
+    elif type(binaries_ent) == dict:
+        ffmpegpath = binaries_ent["ffmpeg"]
     else:
         raise TypeError(
             "Passed binary can only be in format string or dictionary")
 
     result = subprocess.run(
         [
-            "ffmpeg",
+            ffmpegpath,
             "-hide_banner",
             "-i", videofile_path,
             "-map", "0:v:0",
@@ -640,20 +658,23 @@ def video_stream_size(binaries, videofile_path):
         raise ValueError(result.stderr.rstrip("\n"))
 
 
-def video_dimensions(binaries, videofile_path):
+def video_dimensions(videofile_path, binaries_ent=None):
     """ Get framerate of video in seconds.
 
     Args:
-        binaries: Dictionary with binaries and their path or string with path
+        binaries_ent: Dictionary with binaries and their path or string with path
                   to ffprobe.
         videofile_path: Path to video file.
 
     Returns: Framerate of video.
     """
-    if type(binaries) == str:
-        ffprobepath = binaries
-    elif type(binaries) == dict:
+    if binaries_ent is None:
+        global binaries
         ffprobepath = binaries["ffprobe"]
+    elif type(binaries_ent) == str:
+        ffprobepath = binaries_ent
+    elif type(binaries_ent) == dict:
+        ffprobepath = binaries_ent["ffprobe"]
     else:
         raise TypeError(
             "Passed binary can only be in format string or dictionary")
@@ -686,3 +707,54 @@ def video_dimensions(binaries, videofile_path):
             return resolution_str
         except ValueError:
             raise ValueError(result.stderr.rstrip("\n"))
+
+
+def video_pix_fmt(videofile_path, binaries_ent=None):
+    """ Get pix_fmt of video in ffmpeg's format.
+
+    Args:
+        binaries_ent: Dictionary with binaries and their path or string with path
+                  to ffprobe.
+        videofile_path: Path to video file.
+
+    Returns: String with ffmpeg pix_fmt format. (eg. "yuv420p10le")
+    """
+    if binaries_ent is None:
+        global binaries
+        ffprobepath = binaries["ffprobe"]
+    elif type(binaries_ent) == str:
+        ffprobepath = binaries_ent
+    elif type(binaries_ent) == dict:
+        ffprobepath = binaries_ent["ffprobe"]
+    else:
+        raise TypeError(
+            "Passed binary can only be in format string or dictionary")
+
+    global videofiles_pix_fmt
+    try:
+        pix_fmt = videofiles_pix_fmt[videofile_path]
+        return pix_fmt
+    except KeyError:
+        result = subprocess.run(
+            [
+                ffprobepath,
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=pix_fmt",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                videofile_path,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        return str(result.stdout.split("\n")[0])
+
+
+def video_get_info_for_yuv(videofile_path, binaries_ent=None):
+    return (video_framerate(videofile_path, binaries_ent),
+            video_dimensions(videofile_path, binaries_ent),
+            video_pix_fmt(videofile_path, binaries_ent))
