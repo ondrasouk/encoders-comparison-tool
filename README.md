@@ -9,12 +9,12 @@ Tool for batch transcoding video sequences for video encoder comparison.
 - [x] Catching non zero return codes.
 - [x] Paralel jobs in batch transcoding.
 - [x] Save report from FFmpeg.
+- [x] Statistics of CPU and RAM usage through encode process.
 - [ ] Support for other codecs unsuported by FFmpeg.
 - [ ] Better documentation.
 
 ### Ideas
 
-- [ ] Statistics of CPU and RAM usage through encode process.
 - [ ] Objective video quality metrics.
 - [ ] Parse output of quality metrics and plot graphs.
 - [ ] GUI application.
