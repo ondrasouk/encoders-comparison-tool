@@ -340,6 +340,8 @@ class Transcode_job:
         self.cpu_useage = None
         self.ram_useage = None
         self.useage_logfile = os.path.splitext(outputfile)[0] + "_useage.log"
+        with open(self.useage_logfile, 'w') as logfile:
+            logfile.write("time,state,cpu_time_user,cpu_time_system,cpu_time_children_user,cpu_time_children_system,cpu_time_iowait,cpu_percent,RSS,VMS\n")
 
 
 ###########################################################
@@ -348,33 +350,31 @@ class Transcode_job:
 
 
 class PerpetualTimer:
-    def __init__(self, seconds, target):
-        self._should_continue = False
+    def __init__(self, interval, function, *args, **kwargs):
+        self._timer = None
+        self.interval = interval
+        self.function = function
+        self.args = args
+        self.kwargs = kwargs
         self.is_running = False
-        self.seconds = seconds
-        self.target = target
-        self.thread = None
+        self.next_call = time.time()
+        self.start()
 
-    def _handle_target(self):
-        self.is_running = True
-        self.target()
+    def _run(self):
         self.is_running = False
-        self._start_timer()
-
-    def _start_timer(self):
-        if self._should_continue:
-            self.thread = threading.Timer(self.seconds, self._handle_target)
-            self.thread.start()
+        self.start()
+        self.function(*self.args, **self.kwargs)
 
     def start(self):
-        if not self._should_continue and not self.is_running:
-            self._should_continue = True
-            self._start_timer()
+        if not self.is_running:
+            self.next_call += self.interval
+            self._timer = threading.Timer(self.next_call - time.time(), self._run)
+            self._timer.start()
+            self.is_running = True
 
-    def cancel(self):
-        if self.thread is not None:
-            self._should_continue = False
-            self.thread.cancel()
+    def calncel(self):
+        self._timer.cancel()
+        self.is_running = False
 
 
 def record_useage():
@@ -388,7 +388,7 @@ def record_useage():
                 m = proc.memory_info()
             msg = f"{p.user},{p.system},{p.children_user},{p.children_system},{p.iowait},{p_percent},{m.rss},{m.vms}"
             with open(job.useage_logfile, 'a') as logfile:
-                logfile.write(f"{time.time()},{job.status['state']},{msg}\n")
+                logfile.write(f"{time.time() - proc.create_time()},{job.status['state']},{msg}\n")
 
 
 ###########################################################
