@@ -5,6 +5,10 @@ import threading
 import concurrent.futures as cf
 from importlib import util
 import numpy as np
+import psutil
+
+
+MONITOR_PROC_SECS = 0.1
 
 
 # Colors in terminal
@@ -334,6 +338,57 @@ class Transcode_job:
         }
         self.PID = None
         self.cpu_useage = None
+        self.ram_useage = None
+        self.useage_logfile = os.path.splitext(outputfile)[0] + "_useage.log"
+
+
+###########################################################
+# Code for monitoring and recording encoding resources useage
+###########################################################
+
+
+class PerpetualTimer:
+    def __init__(self, seconds, target):
+        self._should_continue = False
+        self.is_running = False
+        self.seconds = seconds
+        self.target = target
+        self.thread = None
+
+    def _handle_target(self):
+        self.is_running = True
+        self.target()
+        self.is_running = False
+        self._start_timer()
+
+    def _start_timer(self):
+        if self._should_continue:
+            self.thread = threading.Timer(self.seconds, self._handle_target)
+            self.thread.start()
+
+    def start(self):
+        if not self._should_continue and not self.is_running:
+            self._should_continue = True
+            self._start_timer()
+
+    def cancel(self):
+        if self.thread is not None:
+            self._should_continue = False
+            self.thread.cancel()
+
+
+def record_useage():
+    global job_list
+    for job in job_list:
+        if job.PID is not None:
+            proc = psutil.Process(job.PID)
+            with proc.oneshot():
+                p = proc.cpu_times()
+                p_percent = proc.cpu_percent()
+                m = proc.memory_info()
+            msg = f"{p.user},{p.system},{p.children_user},{p.children_system},{p.iowait},{p_percent},{m.rss},{m.vms}"
+            with open(job.useage_logfile, 'a') as logfile:
+                logfile.write(f"{time.time()},{job.status['state']},{msg}\n")
 
 
 ###########################################################
@@ -391,6 +446,9 @@ def transcode(binaries_ent, videofiles, transcode_set, output_path):
         # TODO Do not use more than 61 threads under Windows.
         # https://stackoverflow.com/questions/1006289/how-to-find-out-the-number-of-cpus-using-python
 
+    monitor = PerpetualTimer(MONITOR_PROC_SECS, record_useage)
+    monitor.start()
+
     with cf.ThreadPoolExecutor(max_workers=concurrency,
                                thread_name_prefix='job') as pool:
         futures = tuple(
@@ -398,6 +456,7 @@ def transcode(binaries_ent, videofiles, transcode_set, output_path):
 
     for future in futures:
         print(f"Exceptions on job {future.result()[0]}: {future.exception()}")
+    monitor.cancel()
 
 
 def transcode_status_update_callback(jobid, stat):

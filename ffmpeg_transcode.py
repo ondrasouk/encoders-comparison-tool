@@ -106,6 +106,7 @@ def transcode_start(job):
         ffreport = {"FFREPORT": f"file={job.outputfile[0: -3]}report"}  # TODO make it better
         enc.transcode_status_update_callback(job.job_id, ["state", "first pass"])
         firstpass, fdr, fdw = _transcode(job.job_id, job.binary, job.inputfile, job.args, job.outputfile, ffreport, 1, job.two_pass)
+        job.PID = firstpass.pid
         transcodeGetInfo = threading.Thread(target=transcode_get_info,
                                             args=(job.job_id, firstpass, fdr))
         transcodeGetInfo.start()
@@ -113,6 +114,7 @@ def transcode_start(job):
             line = firstpass.stdout.readline().rstrip("\n")
             enc.transcode_stdout_update_callback(job.job_id, line)
         firstpass.wait()
+        job.PID = None
         transcodeGetInfo.join(timeout=1)
         transcode_clean(fdw)
         if (firstpass.returncode > 0):
@@ -124,6 +126,7 @@ def transcode_start(job):
         ffreport = {"FFREPORT": f"file={job.outputfile[0: -3]}report"}  # TODO make it better
         enc.transcode_status_update_callback(job.job_id, ["state", "second pass"])
         process, fdr, fdw = _transcode(job.job_id, job.binary, job.inputfile, job.args, job.outputfile, ffreport, 2, job.two_pass)
+        job.PID = process.pid
         transcodeGetInfo = threading.Thread(target=transcode_get_info,
                                             args=(job.job_id, process, fdr))
         transcodeGetInfo.start()
@@ -131,6 +134,7 @@ def transcode_start(job):
             line = process.stdout.readline().rstrip("\n")
             enc.transcode_stdout_update_callback(job.job_id, line)
         process.wait()
+        job.PID = None
         transcodeGetInfo.join(timeout=1)
         transcode_clean(fdw)
         if (process.returncode > 0):
@@ -142,13 +146,15 @@ def transcode_start(job):
         ffreport = {"FFREPORT": f"file={job.outputfile[0: -3]}report"}  # TODO make it better
         enc.transcode_status_update_callback(job.job_id, ["state", "running"])
         process, fdr, fdw = _transcode(job.job_id, job.binary, job.inputfile, job.args, job.outputfile, ffreport, 1, job.two_pass)
+        job.PID = process.pid
         transcodeGetInfo = threading.Thread(target=transcode_get_info,
                                             args=(job.job_id, process, fdr))
         transcodeGetInfo.start()
         while process.poll() is None:
             line = process.stdout.readline().rstrip("\n")
             enc.transcode_stdout_update_callback(job.job_id, line)
-        process.wait()
+        process.wait
+        job.PID = None
         transcodeGetInfo.join(timeout=1)
         transcode_clean(fdw)
         if (process.returncode > 0):
