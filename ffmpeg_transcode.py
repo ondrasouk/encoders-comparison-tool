@@ -162,6 +162,7 @@ def transcode_start(job):
                 "command: {}\n failed with returncode: {}\nProgram output:\n{}"
                 .format(" ".join(process.args), process.returncode,
                         process.stdout.read()))
+    job.finished = True
     return job.job_id, process.returncode
 
 

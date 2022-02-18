@@ -322,10 +322,13 @@ class Transcode_job:
         self.args = args
         self.inputfile = inputfile
         self.outputfile = outputfile
-        self.encodedfile = None
+        if mod.OUTPUT_UNSUPORTED_BY_FFMPEG:
+            self.encodedfile = os.path.splitext(outputfile)[0] + mod.ENCODED_FILE_TYPE
+        else:
+            self.encodedfile = outputfile
         self.two_pass = transcode_set.two_pass
         self.binaries = binaries
-        self.finished = None
+        self.finished = False
         self.status = {
             'frame': '0',
             'fps': '0.00',
@@ -338,7 +341,7 @@ class Transcode_job:
         }
         self.PID = None
         self.cpu_useage = None
-        self.ram_useage = None
+        self.mem_useage = None
         self.useage_logfile = os.path.splitext(outputfile)[0] + "_useage.log"
         with open(self.useage_logfile, 'w') as logfile:
             logfile.write("time,state,cpu_time_user,cpu_time_system,cpu_time_children_user,cpu_time_children_system,cpu_time_iowait,cpu_percent,RSS,VMS\n")
@@ -394,6 +397,8 @@ def record_useage():
             msg = f"{p.user},{p.system},{p.children_user},{p.children_system},{p.iowait},{p_percent},{m.rss},{m.vms}"
             with open(job.useage_logfile, 'a') as logfile:
                 logfile.write(f"{time.time() - proc.create_time()},{job.status['state']},{msg}\n")
+            job.cpu_useage = p_percent
+            job.mem_useage = m.rss
 
 
 ###########################################################
