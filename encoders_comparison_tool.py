@@ -33,6 +33,7 @@ videofiles_duration = {}
 videofiles_framerate = {}
 videofiles_resolution = {}
 videofiles_pix_fmt = {}
+pix_fmts_bpp = {}
 
 # Index corresponds to job_id.
 #status = np.array([{}])
@@ -276,7 +277,6 @@ def count(n=0):
 
 # TODO
 # unused for now
-"""
 class inputfile_variants(object):
     def __init__(self):
         self.variants = []
@@ -310,7 +310,6 @@ class inputfile_variants(object):
     def clean_variants(self):
         self.lock.acquire()
         self.lock.release()
-"""
 
 
 class Transcode_job:
@@ -345,6 +344,10 @@ class Transcode_job:
         self.useage_logfile = os.path.splitext(outputfile)[0] + "_useage.log"
         with open(self.useage_logfile, 'w') as logfile:
             logfile.write("time,state,cpu_time_user,cpu_time_system,cpu_time_children_user,cpu_time_children_system,cpu_time_iowait,cpu_percent,RSS,VMS\n")
+        if os.path.splitext(inputfile)[1] in mod.INPUT_FILE_TYPE:
+            self.inputfile_variant = None
+        else:
+            mod.get_input_variant(self)
 
 
 ###########################################################
@@ -380,7 +383,7 @@ class PerpetualTimer:
             self._timer.start()
             self.is_running = True
 
-    def calncel(self):
+    def cancel(self):
         self._timer.cancel()
         self.is_running = False
 
@@ -827,3 +830,34 @@ def video_get_info_for_yuv(videofile_path, binaries_ent=None):
     return (video_framerate(videofile_path, binaries_ent),
             video_dimensions(videofile_path, binaries_ent),
             video_pix_fmt(videofile_path, binaries_ent))
+
+
+def pix_fmt_bpp(pix_fmt, binaries_ent=None):
+    if binaries_ent is None:
+        global binaries
+        ffmpegpath = binaries["ffmpeg"]
+    elif type(binaries_ent) == str:
+        ffmpegpath = binaries_ent
+    elif type(binaries_ent) == dict:
+        ffmpegpath = binaries_ent["ffmpeg"]
+    else:
+        raise TypeError(
+            "Passed binary can only be in format string or dictionary")
+
+    result = subprocess.run(
+        [
+            ffmpegpath,
+            "-pix_fmts",
+            "-hide_banner",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    line = [s for s in result.stdout.split("\n") if pix_fmt+" " in s][0]
+    if line[2] == "H":
+        return -1
+    return int(line[-4:].lstrip())
+
+
+def calculate_size_raw(num_frames, video_dimensions, pix_fmt, binaries_ent=None):
+    return num_frames*int(video_dimensions.split("x")[0])*int(video_dimensions.split("x")[1])*pix_fmt_bpp(pix_fmt, binaries_ent)

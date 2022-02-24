@@ -166,6 +166,10 @@ def transcode_start(job):
     return job.job_id, process.returncode
 
 
+def get_input_variant(job):
+    pass
+
+
 # Clean after transcode ended.
 def transcode_clean(fdw):
     try:
