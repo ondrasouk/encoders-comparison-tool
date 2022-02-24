@@ -488,7 +488,7 @@ def transcode_status_update_callback(job, stat):
     if stat[0] == "progress":
         try:
             for i in range(len(job_list)):
-                print(f"job id {i}, state: {job.status['state']}, progress: {job.status['progress_perc']}%")
+                print(f"job id {i}, state: {job_list[i].status['state']}, progress: {job_list[i].status['progress_perc']}%")
         except KeyError:
             pass
 
