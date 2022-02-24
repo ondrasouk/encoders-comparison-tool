@@ -341,7 +341,9 @@ class Transcode_job:
         self.PID = None
         self.cpu_useage = None
         self.mem_useage = None
-        self.useage_logfile = os.path.splitext(outputfile)[0] + "_useage.log"
+        self.basename = os.path.splitext(outputfile)[0]
+        self.useage_logfile = self.basename + "_useage.log"
+        self.report = self.basename + ".report"  # verbose log or stdout record
         with open(self.useage_logfile, 'w') as logfile:
             logfile.write("time,state,cpu_time_user,cpu_time_system,cpu_time_children_user,cpu_time_children_system,cpu_time_iowait,cpu_percent,RSS,VMS\n")
         if os.path.splitext(inputfile)[1] in mod.INPUT_FILE_TYPE:
@@ -472,26 +474,26 @@ def transcode(binaries_ent, videofiles, transcode_set, output_path):
     monitor.cancel()
 
 
-def transcode_status_update_callback(jobid, stat):
+def transcode_status_update_callback(job, stat):
     """ Callback from module to update status.
 
     Args:
-        jobid: job id
+        job: Transcode_job object
         stat: status to commit to global variable
     """
     try:
-        job_list[jobid].status[stat[0]] = stat[1]
+        job.status[stat[0]] = stat[1]
     except IndexError:
         print(f"IndexError: {stat}")
     if stat[0] == "progress":
         try:
             for i in range(len(job_list)):
-                print(f"job id {i}, state: {job_list[i].status['state']}, progress: {job_list[i].status['progress_perc']}%")
+                print(f"job id {i}, state: {job.status['state']}, progress: {job.status['progress_perc']}%")
         except KeyError:
             pass
 
 
-def transcode_stdout_update_callback(jobid, line):
+def transcode_stdout_update_callback(job, line):
     """ Callback from module to update stdout.
 
     Args:
