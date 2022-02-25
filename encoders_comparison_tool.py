@@ -36,7 +36,6 @@ videofiles_pix_fmt = {}
 pix_fmts_bpp = {}
 
 # Index corresponds to job_id.
-#status = np.array([{}])
 job_list = []
 
 
@@ -467,7 +466,7 @@ def transcode(binaries_ent, videofiles, transcode_set, output_path):
     with cf.ThreadPoolExecutor(max_workers=concurrency,
                                thread_name_prefix='job') as pool:
         futures = tuple(
-            pool.submit(mod.transcode_start, job) for job in job_list)
+            pool.submit(mod.transcode_start, job) for job in job_list if not job.finished)
 
     for future in futures:
         print(f"Exceptions on job {future.result()[0]}: {future.exception()}")
