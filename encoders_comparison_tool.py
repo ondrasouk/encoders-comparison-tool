@@ -337,18 +337,32 @@ class Transcode_job:
             'progress_perc': '0.00',
             'state': 'waiting'  # for indicating two-pass and other processing
         }
-        self.PID = None
+        self._PID = None
         self.cpu_useage = None
         self.mem_useage = None
+        self.bias_time = 0
         self.basename = os.path.splitext(outputfile)[0]
         self.useage_logfile = self.basename + "_useage.log"
         self.report = self.basename + ".report"  # verbose log or stdout record
         with open(self.useage_logfile, 'w') as logfile:
-            logfile.write("time,state,cpu_time_user,cpu_time_system,cpu_time_children_user,cpu_time_children_system,cpu_time_iowait,cpu_percent,RSS,VMS\n")
+            logfile.write("time,bias_time,state,cpu_time_user,cpu_time_system,cpu_time_children_user,cpu_time_children_system,cpu_time_iowait,cpu_percent,RSS,VMS\n")
         if os.path.splitext(inputfile)[1] in mod.INPUT_FILE_TYPE:
             self.inputfile_variant = None
         else:
             mod.get_input_variant(self)
+
+    @property
+    def PID(self):
+        return self._PID
+
+    @PID.setter
+    def PID(self, PID):
+        self.bias_time = 0
+        self._PID = PID
+
+    @PID.deleter
+    def PID(self):
+        del self._PID
 
 
 ###########################################################
@@ -369,8 +383,8 @@ class PerpetualTimer:
         self.args = args
         self.kwargs = kwargs
         self.is_running = False
-        self.next_call = time.time()
-        self.start()
+        self.next_call = time.time()  # set initial time to actual time
+        self.start()  # First run
 
     def _run(self):
         self.is_running = False
@@ -380,6 +394,17 @@ class PerpetualTimer:
     def start(self):
         if not self.is_running:
             self.next_call += self.interval
+            if (time.time() - self.next_call) > self.interval:
+                global job_list
+                for job in (job for job in job_list if job.PID is not None):
+                    job.bias_time += (time.time() - self.next_call)
+                # Store the time spend in suspended mode.
+                # maximum error is not larger than self.interval
+                self.next_call = time.time() + self.interval
+                # When going from suspended mode to active the PerpetualTimer
+                # needs resseting the next_call or else it will call the
+                # function as many times as it should while the system was
+                # suspended.
             self._timer = threading.Timer(self.next_call - time.time(), self._run)
             self._timer.start()
             self.is_running = True
@@ -391,18 +416,17 @@ class PerpetualTimer:
 
 def record_useage():
     global job_list
-    for job in job_list:
-        if job.PID is not None:
-            proc = psutil.Process(job.PID)
-            with proc.oneshot():
-                p = proc.cpu_times()
-                p_percent = proc.cpu_percent()
-                m = proc.memory_info()
-            msg = f"{p.user},{p.system},{p.children_user},{p.children_system},{p.iowait},{p_percent},{m.rss},{m.vms}"
-            with open(job.useage_logfile, 'a') as logfile:
-                logfile.write(f"{time.time() - proc.create_time()},{job.status['state']},{msg}\n")
-            job.cpu_useage = p_percent
-            job.mem_useage = m.rss
+    for job in (job for job in job_list if job.PID is not None):
+        proc = psutil.Process(job.PID)
+        with proc.oneshot():
+            p = proc.cpu_times()
+            p_percent = proc.cpu_percent()
+            m = proc.memory_info()
+        msg = f"{p.user},{p.system},{p.children_user},{p.children_system},{p.iowait},{p_percent},{m.rss},{m.vms}"
+        with open(job.useage_logfile, 'a') as logfile:
+            logfile.write(f"{time.time() - (proc.create_time() + job.bias_time)},{job.bias_time},{job.status['state']},{msg}\n")
+        job.cpu_useage = p_percent
+        job.mem_useage = m.rss
 
 
 ###########################################################
