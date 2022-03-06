@@ -97,7 +97,8 @@ def _decode_to_ffmpeg(job):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    cmd = [job.binaries["ffmpeg"], "-i", "pipe:0", "-c:v", "ffv1", job.outputfile]
+    cmd = [job.binaries["ffmpeg"], "-i", "pipe:0", "-c:v", "ffv1",
+           "-y", job.outputfile]
     process_ffmpeg = subprocess.Popen(
         cmd,
         text=True,
@@ -173,11 +174,19 @@ def transcode_start(job):
         enc.transcode_status_update_callback(job, ["state", "measuring decode"])
         process = _decode_to_null(job)
         job.PID = process.pid
+        frame_num = 0
+        while process.poll() is None:
+            line = process.stdout.readline().rstrip("\n")
+            frame_num = transcode_get_info(job, process, line, frame_num)
         process.wait()
         job.PID = None
         print(process.returncode)
     enc.transcode_status_update_callback(job, ["state", "decoding and compressing"])
     process_vvdec, process_ffmpeg = _decode_to_ffmpeg(job)
+    frame_num = 0
+    while process_vvdec.poll() is None:
+        line = process_vvdec.stderr.readline().rstrip("\n")
+        frame_num = transcode_get_info(job, process_vvdec, line, frame_num)
     process_vvdec.wait()
     process_ffmpeg.wait()
     print(process_vvdec.returncode)
