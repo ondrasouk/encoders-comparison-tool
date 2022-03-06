@@ -5,23 +5,25 @@ The tool is under development.
 
 For now it's just smarter Python script. No additional queuing of jobs.
 
+Note:
+
+- For VVenC have prepared YUV file with same name as input video and ".yuv" extension. From input video is retrieved pixel format, size and framerate of video.
+
 ### Work in progress
 
 - Minimal Resource Manager - Uncompressed test sequences is large, so storing
 them in lightweight ffvhuff or other compressed form on slower disk and on
 demand decompres them on faster disk with smaller capacity (RAM or NVMe SSD).
+On the RAM will be only one sequence at time and on SSD untill 90% of used space.
 For measuring CPU and RAM useage, it's more accurate to work with uncompressed
 video because even the ffvhuff adds for 4K content about 700MB of RAM. 
 - Support for VVenC/VVdeC
-  - serving the YUV file with informations (useage of resource manager)
-  - encode with logging to file and progress in terminal
-  - decode to YUV
-  - encode the output to FFV1
-  - The newest version of VVenC may support Y4M, but for testing it's more reliable
+  - usage of resource manager to make YUV files
 to just use YUV.
 - Dump all the standalone scripts for calculating objective VQM in batch, reading the data
 and plotting them with matplotlib. In the future I will integrate them.
-- Support for xeve/xevd, HM, VTM, AOMenc/dec, VPxenc/dec on the way
+- functions for queing, removing, skipping, pausing, stopping and cleaning transcode jobs as a preparation for making something interactive. First will be small TUI.
+- Support for xeve/xevd, HM, VTM, AOMenc/dec, VPxenc/dec postponed until I finish other work with more priority (resource manager).
 
 ### Task list
 
@@ -32,7 +34,7 @@ and plotting them with matplotlib. In the future I will integrate them.
 - [x] Paralel jobs in batch transcoding.
 - [x] Save report from FFmpeg.
 - [x] Statistics of CPU and RAM usage through encode process.
-- [ ] Support for other codecs unsuported by FFmpeg.
+- [x] Support for other codecs unsuported by FFmpeg.
 - [ ] Resource manager (when not measuring the CPU useage and RAM automatically run more jobs in paralel)
 - [ ] Better documentation.
 
