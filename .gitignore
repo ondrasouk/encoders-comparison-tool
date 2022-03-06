@@ -130,6 +130,7 @@ dmypy.json
 
 # Custom files
 *.mkv
+*.yuv
 *.ini
 kate.*
 *.kate-swp
@@ -137,3 +138,6 @@ kate.*
 ffmpeg*/
 *.log
 *.mbtree
+*.pgf
+*.svg
+out/
