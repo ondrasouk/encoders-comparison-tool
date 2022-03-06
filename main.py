@@ -16,12 +16,14 @@ options1 = np.array([["-c:v", "libsvtav1"],
                     ["-preset", enc.sweep_param("add", 9, 10, 1)]], dtype=object)
 options2 = np.array([["-c:v", "libx264"],
                     ["-level", "4.1"],
-                    ["-preset", enc.sweep_param("list", ["ultrafast", "medium", "slow"])],
+                    ["-preset", enc.sweep_param("list", ["ultrafast", "slower"])],
                     ["-b:v", enc.sweep_param("lin", 0.1, 4, 2, "", "M")],
                     ["-an"],
                     ["-y"],
                     ["-sn"]], dtype=object)
-options3 = np.array([["-q", enc.sweep_param("add", 32, 32, 1)]], dtype=object)
+options3 = np.array([["-q", enc.sweep_param("add", 32, 33, 5)],
+                     ["--preset", "faster"],
+                     ["-t", "10"]], dtype=object)
 # Make transcode_set list (options list).
 # enc.Transcode_setting is class for making transcode options with what module
 # to load and what binary it will use.
@@ -29,7 +31,7 @@ transcode_set = []
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options))
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options1, concurrent=-1))
 transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options2, concurrent=1, two_pass=True))
-transcode_set = np.append(transcode_set, enc.Transcode_setting("vvenc_transcode.py", ("../vvenc/bin/release-static/vvencapp", "../vvdec/bin/release-static/vvdecapp"), options3, concurrent=1, two_pass=False))
+transcode_set = np.append(transcode_set, enc.Transcode_setting("vvenc_transcode.py", ("../vvenc/bin/release-static/vvencFFapp", "../vvdec/bin/release-static/vvdecapp"), options3, concurrent=1, two_pass=False))
 # Dictionary for storing paths for binaries.
 binaries = {
     "ffprobe": "/usr/bin/ffprobe",
@@ -57,4 +59,6 @@ if os.path.isdir(outputpath) == 0:
 print(transcode_set[0]())
 print("\nencoding:\n")
 # Start the transcode.
-enc.transcode(binaries, inputfiles_list, transcode_set[2], outputpath)
+#enc.transcode(binaries, inputfiles_list, transcode_set[0], outputpath)
+#enc.transcode(binaries, inputfiles_list, transcode_set[2], outputpath)
+enc.transcode(binaries, inputfiles_list, transcode_set[3], outputpath)

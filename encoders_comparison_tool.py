@@ -320,8 +320,10 @@ class Transcode_job:
         self.args = args
         self.inputfile = inputfile
         self.outputfile = outputfile
+        self.measure_decode = True
+        # TODO add to ffmpeg
         if mod.OUTPUT_UNSUPORTED_BY_FFMPEG:
-            self.encodedfile = os.path.splitext(outputfile)[0] + mod.ENCODED_FILE_TYPE
+            self.encodedfile = os.path.splitext(outputfile)[0] + "." + mod.ENCODED_FILE_TYPE
         else:
             self.encodedfile = outputfile
         self.two_pass = transcode_set.two_pass
@@ -349,7 +351,7 @@ class Transcode_job:
         if os.path.splitext(inputfile)[1] in mod.INPUT_FILE_TYPE:
             self.inputfile_variant = None
         else:
-            mod.get_input_variant(self)
+            self.inputfile_variant = mod.get_input_variant(inputfile)
 
     @property
     def PID(self):
@@ -366,7 +368,7 @@ class Transcode_job:
 
 
 ###########################################################
-# Code for monitoring and recording encoding resources useage
+# Code for monitoring and recording encoding resources usage
 ###########################################################
 
 
@@ -650,15 +652,15 @@ def video_length_seconds(videofile_path, binaries_ent=None):
             raise ValueError(result.stderr.rstrip("\n"))
 
 
-def video_framerate(videofile_path, binaries_ent=None):
-    """ Get framerate of video in seconds.
+def video_framerate_str(videofile_path, binaries_ent=None):
+    """ Get framerate of video as string.
 
     Args:
         binaries_ent: Dictionary with binaries and their path or string with path
                   to ffprobe.
         videofile_path: Path to video file.
 
-    Returns: Framerate of video.
+    Returns: Framerate of video as string of "numerator/denominator".
     """
     if binaries_ent is None:
         global binaries
@@ -671,10 +673,10 @@ def video_framerate(videofile_path, binaries_ent=None):
         raise TypeError(
             "Passed binary can only be in format string or dictionary")
 
-    global videofiles_duration
+    global videofiles_framerate
     try:
-        framerate = videofiles_framerate[videofile_path]
-        return framerate
+        framerate_str = videofiles_framerate[videofile_path]
+        return framerate_str
     except KeyError:
         result = subprocess.run(
             [
@@ -692,12 +694,34 @@ def video_framerate(videofile_path, binaries_ent=None):
         )
         try:
             framerate_str = str(result.stdout.split("\n")[0])
-            framerate = int(framerate_str.split("/")[0]) / int(
-                framerate_str.split("/")[1])
-            videofiles_framerate[videofile_path] = framerate
-            return framerate
+            videofiles_framerate[videofile_path] = framerate_str
+            return framerate_str
         except ValueError:
             raise ValueError(result.stderr.rstrip("\n"))
+
+
+def video_framerate(videofile_path, binaries_ent=None):
+    """ Get framerate of video.
+
+    Args:
+        binaries_ent: Dictionary with binaries and their path or string with path
+                  to ffprobe.
+        videofile_path: Path to video file.
+
+    Returns: Framerate of video as number.
+    """
+    global videofiles_framerate
+    try:
+        framerate_str = videofiles_framerate[videofile_path]
+        framerate = int(framerate_str.split("/")[0]) / int(
+                framerate_str.split("/")[1])
+        return framerate
+    except KeyError:
+        framerate_str = video_framerate_str(videofile_path, binaries_ent=binaries_ent)
+        framerate = int(framerate_str.split("/")[0]) / int(
+            framerate_str.split("/")[1])
+        videofiles_framerate[videofile_path] = framerate_str
+        return framerate
 
 
 def video_frames(videofile_path, binaries_ent=None):
@@ -756,14 +780,14 @@ def video_stream_size(videofile_path, binaries_ent=None):
 
 
 def video_dimensions(videofile_path, binaries_ent=None):
-    """ Get framerate of video in seconds.
+    """ Get dimensions of video in pixels.
 
     Args:
         binaries_ent: Dictionary with binaries and their path or string with path
                   to ffprobe.
         videofile_path: Path to video file.
 
-    Returns: Framerate of video.
+    Returns: Dimensions of video in string. e.g. "1920x1080"
     """
     if binaries_ent is None:
         global binaries
