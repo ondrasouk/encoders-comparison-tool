@@ -24,7 +24,10 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 
-# Everything for setting the parameters of video transcode
+###########################################################
+# Code for main logic
+###########################################################
+
 
 # Index corresponds to job_id.
 job_list = []
@@ -489,6 +492,11 @@ def transcode(binaries_ent, videofiles, transcode_set, output_path):
     monitor.cancel()
 
 
+###########################################################
+# Callbacks
+###########################################################
+
+
 def transcode_status_update_callback(job, stat):
     """ Callback from module to update status.
 
@@ -518,6 +526,11 @@ def transcode_stdout_update_callback(job, line):
     pass
     # Read from stdout, because Windows has blocking pipes.
     # TODO For GUI usage there must be callback
+
+
+###########################################################
+# Code for checking of configuration
+###########################################################
 
 
 def transcode_check(binaries_ent,
