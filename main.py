@@ -9,6 +9,7 @@ options = np.array([["-c:v", "libx264"],
                    ["-level", "4.1"],
                    ["-preset", "veryfast"],
                    ["-crf", enc.sweep_param("add", 10, 11, 1)],
+                   ["-y"],
                    ["-an"],
                    ["-sn"]], dtype=object)
 options1 = np.array([["-c:v", "libsvtav1"],
@@ -21,9 +22,10 @@ options2 = np.array([["-c:v", "libx264"],
                     ["-an"],
                     ["-y"],
                     ["-sn"]], dtype=object)
-options3 = np.array([["-q", enc.sweep_param("add", 32, 33, 5)],
+options3 = np.array([["-q", enc.sweep_param("lin", 9, 63, 2)],
                      ["--preset", "faster"],
-                     ["-t", "10"]], dtype=object)
+                     ["-qpa", "1"],
+                     ["-t", "12"]], dtype=object)
 # Make transcode_set list (options list).
 # enc.Transcode_setting is class for making transcode options with what module
 # to load and what binary it will use.

@@ -3,6 +3,7 @@ import re
 import subprocess
 import threading
 import encoders_comparison_tool as enc
+import video_info
 
 
 OUTPUT_UNSUPORTED_BY_FFMPEG = False
@@ -197,7 +198,7 @@ def transcode_get_info(job, process, fdr):
         stat = re.sub(r"[\n\t\s]*", "", line).rsplit("=")
         if stat[0] == "frame":
             calc = ["progress_perc", ""]
-            calc[1] = format((int(stat[1]) / enc.video_frames(job.inputfile) * 100), '.2f')
+            calc[1] = format((int(stat[1]) / video_info.video_frames(job.inputfile) * 100), '.2f')
             enc.transcode_status_update_callback(job, calc)
         if line == "progress=end\n":
             calc[1] = "100.00"
@@ -211,7 +212,7 @@ def transcode_get_info(job, process, fdr):
 def transcode_check_arguments(binpath, filename, args, binaries, mode="quick"):
     key = "".join(args)
     if mode == "slow":
-        framerate = enc.video_framerate(binaries, filename)
+        framerate = video_info.video_framerate(binaries, filename)
         testtime = str(2 / framerate)  # two or one frame to encode
         outputfile = "test.mkv"
         command = [binpath, "-i", filename, "-t", testtime]

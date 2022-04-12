@@ -1,6 +1,7 @@
 import os
 import subprocess
 import encoders_comparison_tool as enc
+import video_info
 
 
 OUTPUT_UNSUPORTED_BY_FFMPEG = True
@@ -117,9 +118,10 @@ def get_input_variant(inputfile):
 
 # Start transcode
 def transcode_start(job):
-    dimensions = enc.video_dimensions(job.inputfile)
-    fps = enc.video_framerate_str(job.inputfile)
-    pix_fmt = enc.video_pix_fmt(job.inputfile)
+    
+    dimensions = video_info.video_dimensions(job.inputfile)
+    fps = video_info.video_framerate_str(job.inputfile)
+    pix_fmt = video_info.video_pix_fmt(job.inputfile)
     InputBitDepth, ChromaFormat, InternalBitDepth = _pix_fmt_to_param(pix_fmt)
     inputfile_format = ["-s", dimensions, "--fps", fps,
                         "--InputBitDepth", InputBitDepth,
@@ -212,11 +214,11 @@ def transcode_get_info(job, process, line, frame_num, report=None):
         frame_num += 1
         enc.transcode_status_update_callback(job, ["frame", frame_num])
         calc = ["progress_perc", ""]
-        calc[1] = format((frame_num / enc.video_frames(job.inputfile) * 100), '.2f')
+        calc[1] = format((frame_num / video_info.video_frames(job.inputfile) * 100), '.2f')
         enc.transcode_status_update_callback(job, calc)
         enc.transcode_status_update_callback(job, ["progress", "running"])
     elif line.startswith(" finished"):
-        enc.transcode_status_update_callback(job, ["frame", str(enc.video_frames(job.inputfile))])
+        enc.transcode_status_update_callback(job, ["frame", str(video_info.video_frames(job.inputfile))])
         enc.transcode_status_update_callback(job, ["progress_perc", "100.00"])
         enc.transcode_status_update_callback(job, ["progress", "finished"])
     with open(report, "a") as f:
