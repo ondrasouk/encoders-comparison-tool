@@ -43,6 +43,7 @@ class Transcode_setting(object):
         concurrent: Set how much paralel transcoding jobs to do.
             values: -1 - number of processors
                     n > 0  - number of concurrent jobs for this setting
+                    none - by default no paralelism
 
     class functions:
         self(): Make an 2D Numpy array with arguments for transcode.
@@ -53,17 +54,13 @@ class Transcode_setting(object):
         is_pos_param(pos): If at pos is no sweep_param raises ValueError.
     """
 
-    def __init__(self,
-                 transcode_plugin: str,
-                 binary: str,
-                 options,
-                 concurrent: int = 0,
-                 two_pass: bool = False):
+    def __init__(self, transcode_plugin: str, binary: str, options, **kwargs):
         self.transcode_plugin = transcode_plugin
         self.binary = binary
         self.options = options
-        self.concurrent = concurrent
-        self.two_pass = two_pass
+        self.kwargs = kwargs
+        self.concurrent = kwargs.get("concurrent")
+        self.two_pass = kwargs.get("two_pass")
 
     def __call__(self):
         """ Make an 2D Numpy array with arguments for transcode.
@@ -306,7 +303,7 @@ class inputfile_variants(object):
 
 
 class Transcode_job:
-    def __init__(self, transcode_set, job_id, mod, args, inputfile, outputfile, binaries):
+    def __init__(self, transcode_set, job_id, mod, args, inputfile, outputfile, binaries, **kwargs):
         self.transcode_set = transcode_set
         self.binary = transcode_set.binary
         self.job_id = job_id
@@ -314,7 +311,10 @@ class Transcode_job:
         self.args = args
         self.inputfile = inputfile
         self.outputfile = outputfile
-        self.measure_decode = True
+        self.kwargs = kwargs
+        self.measure_decode = kwargs.get("measure_decode")
+        self.only_decode = kwargs.get("only_decode")
+        self.append_useage_log = kwargs.get("append_useage_log")
         # TODO add to ffmpeg
         if mod.OUTPUT_UNSUPORTED_BY_FFMPEG:
             self.encodedfile = os.path.splitext(outputfile)[0] + "." + mod.ENCODED_FILE_TYPE
@@ -340,8 +340,9 @@ class Transcode_job:
         self.basename = os.path.splitext(outputfile)[0]
         self.useage_logfile = self.basename + "_useage.log"
         self.report = self.basename + ".report"  # verbose log or stdout record
-        with open(self.useage_logfile, 'w') as logfile:
-            logfile.write("time,bias_time,state,cpu_time_user,cpu_time_system,cpu_time_children_user,cpu_time_children_system,cpu_time_iowait,cpu_percent,RSS,VMS\n")
+        if not self.append_useage_log:
+            with open(self.useage_logfile, 'w') as logfile:
+                logfile.write("time,bias_time,state,cpu_time_user,cpu_time_system,cpu_time_children_user,cpu_time_children_system,cpu_time_iowait,cpu_percent,RSS,VMS\n")
         if os.path.splitext(inputfile)[1] in mod.INPUT_FILE_TYPE:
             self.inputfile_variant = None
         else:
@@ -430,8 +431,8 @@ def record_useage():
 ###########################################################
 
 
-def transcode(binaries_ent, videofiles, transcode_set, output_path):
-    """ Make batch transcode.
+def transcode(binaries_ent, videofiles, transcode_set, output_path, **kwargs):
+    """ Make batch transcode. One-shot function.
 
     Args:
         binaries_ent: Dictionary with binaries and their path.
@@ -468,9 +469,10 @@ def transcode(binaries_ent, videofiles, transcode_set, output_path):
                 if ch in outputfile:
                     outputfile = outputfile.replace(ch, "")
             outputfile = str(output_path + outputfile + ".mkv")
-        job_list.append(Transcode_job(transcode_set, len(job_list), mod, args, videofile, outputfile, binaries_ent))
+        job_list.append(Transcode_job(transcode_set, len(job_list), mod, args, videofile, outputfile, binaries_ent, **kwargs))
 
-    if transcode_set.concurrent == 0:
+    # TODO limit maximum number of workers by Transcode_job concurrency
+    if not transcode_set.concurrent:
         concurrency = 1
     elif transcode_set.concurrent == -1:
         concurrency = len(os.sched_getaffinity(0))

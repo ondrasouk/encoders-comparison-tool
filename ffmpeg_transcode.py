@@ -28,17 +28,21 @@ config_test_quick = {}
 
 
 # Internal function
-def _transcode_cmd(job, progress_p_w, run):
-    if job.two_pass:
+def _transcode_cmd(job, progress_p_w, run, decode_to_null):
+    print(decode_to_null)
+    if os.name == "posix":
+        nullfile = "/dev/null"
+    elif os.name == "nt":
+        nullfile = "NUL"
+    if decode_to_null:
+        cmd = [job.binary, "-i", job.encodedfile, "-nostdin", "-progress",
+               str("pipe:" + str(progress_p_w)), "-f", "null", nullfile]
+    elif job.two_pass:
         if(run == 1):
-            if os.name == "posix":
-                output = "/dev/null"
-            if os.name == "nt":
-                output = "NUL"
             cmd = [
                 job.binary, "-i", job.inputfile, "-nostdin", "-pass", str(1), "-y",
                 "-progress", str("pipe:" + str(progress_p_w)), "-passlogfile",
-                str(job.job_id)] + list(job.args) + ["-f", "null", output]
+                str(job.job_id)] + list(job.args) + ["-f", "null", nullfile]
         elif(run == 2):
             cmd = [
                 job.binary, "-i", job.inputfile, "-nostdin", "-progress",
@@ -50,16 +54,16 @@ def _transcode_cmd(job, progress_p_w, run):
             job.binary, "-i", job.inputfile, "-nostdin", "-progress",
             str("pipe:" + str(progress_p_w))
         ] + list(job.args) + [job.outputfile]
-    print(" ".join(cmd))
+    print(" ".join(cmd))  # TODO Debug output
     return cmd
 
 
 # Start transcode
-def _transcode(job, ffreport, run):
+def _transcode(job, ffreport, run, decode_to_null=False):
     ffenv = {**os.environ, **ffreport}  # Add aditional enviroment variables
     fdr, fdw = os.pipe()
     if os.name == "posix":
-        cmd = _transcode_cmd(job, fdw, run)
+        cmd = _transcode_cmd(job, fdw, run, decode_to_null)
         process = subprocess.Popen(
             cmd,
             pass_fds=[fdw],
@@ -85,7 +89,7 @@ def _transcode(job, ffreport, run):
         # https://bugs.python.org/issue32865
         # https://github.com/python/cpython/pull/13739
         #
-        cmd = _transcode_cmd(job, fdw_dup, run)
+        cmd = _transcode_cmd(job, fdw_dup, run, decode_to_null)
         process = subprocess.Popen(
             cmd,
             text=True,
@@ -141,10 +145,30 @@ def transcode_start(job):
                 "command: {}\n failed with returncode: {}\nProgram output:\n{}"
                 .format(" ".join(process.args), process.returncode,
                         process.stdout.read()))
-    else:
+    elif not job.only_decode:
         ffreport = {"FFREPORT": f"file={job.report}"}
         enc.transcode_status_update_callback(job, ["state", "running"])
         process, fdr, fdw = _transcode(job, ffreport, 1)
+        job.PID = process.pid
+        transcodeGetInfo = threading.Thread(target=transcode_get_info,
+                                            args=(job, process, fdr))
+        transcodeGetInfo.start()
+        while process.poll() is None:
+            line = process.stdout.readline().rstrip("\n")
+            enc.transcode_stdout_update_callback(job, line)
+        process.wait
+        job.PID = None
+        transcodeGetInfo.join(timeout=1)
+        transcode_clean(fdw)
+        if (process.returncode > 0):
+            raise ValueError(
+                "command: {}\n failed with returncode: {}\nProgram output:\n{}"
+                .format(" ".join(process.args), process.returncode,
+                        process.stdout.read()))
+    if job.measure_decode or job.only_decode:
+        ffreport = {"FFREPORT": f"file={job.basename}_decode.report"}
+        enc.transcode_status_update_callback(job, ["state", "measuring decode"])
+        process, fdr, fdw = _transcode(job, ffreport, 1, decode_to_null=True)
         job.PID = process.pid
         transcodeGetInfo = threading.Thread(target=transcode_get_info,
                                             args=(job, process, fdr))

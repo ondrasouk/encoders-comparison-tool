@@ -157,7 +157,7 @@ def transcode_start(job):
                 "command: {}\n failed with returncode: {}\nProgram output:\n{}"
                 .format(" ".join(process.args), process.returncode,
                         process.stdout.read()))
-    else:
+    elif not job.only_decode:
         enc.transcode_status_update_callback(job, ["state", "running"])
         process = _encode(job, inputfile_format, 1)
         job.PID = process.pid
@@ -172,7 +172,7 @@ def transcode_start(job):
                 "command: {}\n failed with returncode: {}\nProgram output:\n{}"
                 .format(" ".join(process.args), process.returncode,
                         process.stdout.read()))
-    if job.measure_decode:
+    if job.measure_decode or job.only_decode:
         enc.transcode_status_update_callback(job, ["state", "measuring decode"])
         process = _decode_to_null(job)
         job.PID = process.pid
@@ -183,16 +183,17 @@ def transcode_start(job):
         process.wait()
         job.PID = None
         print(process.returncode)
-    enc.transcode_status_update_callback(job, ["state", "decoding and compressing"])
-    process_vvdec, process_ffmpeg = _decode_to_ffmpeg(job)
-    frame_num = 0
-    while process_vvdec.poll() is None:
-        line = process_vvdec.stderr.readline().rstrip("\n")
-        frame_num = transcode_get_info(job, process_vvdec, line, frame_num)
-    process_vvdec.wait()
-    process_ffmpeg.wait()
-    print(process_vvdec.returncode)
-    print(process_ffmpeg.returncode)
+    if not job.only_decode:
+        enc.transcode_status_update_callback(job, ["state", "decoding and compressing"])
+        process_vvdec, process_ffmpeg = _decode_to_ffmpeg(job)
+        frame_num = 0
+        while process_vvdec.poll() is None:
+            line = process_vvdec.stderr.readline().rstrip("\n")
+            frame_num = transcode_get_info(job, process_vvdec, line, frame_num)
+        process_vvdec.wait()
+        process_ffmpeg.wait()
+        print(process_vvdec.returncode)
+        print(process_ffmpeg.returncode)
     job.finished = True
     enc.transcode_status_update_callback(job, ["state", "finished"])
     return job.job_id, process.returncode

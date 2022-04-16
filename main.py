@@ -61,6 +61,8 @@ if os.path.isdir(outputpath) == 0:
 print(transcode_set[0]())
 print("\nencoding:\n")
 # Start the transcode.
-#enc.transcode(binaries, inputfiles_list, transcode_set[0], outputpath)
+enc.transcode(binaries, inputfiles_list, transcode_set[0], outputpath)
+enc.transcode(binaries, inputfiles_list, transcode_set[0], outputpath, only_decode=True, append_useage_log=True)
 #enc.transcode(binaries, inputfiles_list, transcode_set[2], outputpath)
 enc.transcode(binaries, inputfiles_list, transcode_set[3], outputpath)
+enc.transcode(binaries, inputfiles_list, transcode_set[3], outputpath, only_decode=True, append_useage_log=True)
