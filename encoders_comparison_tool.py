@@ -321,6 +321,8 @@ class Transcode_job:
         else:
             self.encodedfile = outputfile
         self.two_pass = transcode_set.two_pass
+        if self.only_decode:
+            self.two_pass = False
         self.binaries = binaries
         self.finished = False
         self.status = {
@@ -347,6 +349,9 @@ class Transcode_job:
             self.inputfile_variant = None
         else:
             self.inputfile_variant = mod.get_input_variant(inputfile)
+        if kwargs.get("check_if_exists"):
+            if not os.path.isfile(self.encodedfile):
+                print(f"Doesn't exists: {self.encodedfile}")
 
     @property
     def PID(self):

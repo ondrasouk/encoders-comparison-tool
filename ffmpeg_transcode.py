@@ -35,8 +35,11 @@ def _transcode_cmd(job, progress_p_w, run, decode_to_null):
     elif os.name == "nt":
         nullfile = "NUL"
     if decode_to_null:
-        cmd = [job.binary, "-i", job.encodedfile, "-nostdin", "-progress",
-               str("pipe:" + str(progress_p_w)), "-f", "null", nullfile]
+        cmd = [job.binary]
+        if type(job.kwargs.get("decoder")) is str:
+            cmd = cmd + ["-c:v", job.kwargs.get("decoder")]
+        cmd = cmd + ["-i", job.encodedfile, "-nostdin", "-progress",
+                     str("pipe:" + str(progress_p_w)), "-f", "null", nullfile]
     elif job.two_pass:
         if(run == 1):
             cmd = [
