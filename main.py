@@ -1,6 +1,14 @@
 import os
 import numpy as np
+import pathlib
 import encoders_comparison_tool as enc
+
+
+def output_dir(path):
+    if not os.path.isdir(path):
+        p = pathlib.Path(path)
+        p.mkdir(parents=True, exist_ok=True)
+
 
 # Options for transcoder
 # One line is one option
@@ -26,14 +34,17 @@ options3 = np.array([["-q", enc.sweep_param("lin", 9, 63, 2)],
                      ["--preset", "faster"],
                      ["-qpa", "1"],
                      ["-t", "12"]], dtype=object)
-# Make transcode_set list (options list).
+# Make transcode_set
 # enc.Transcode_setting is class for making transcode options with what module
 # to load and what binary it will use.
-transcode_set = []
-transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options))
-transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options1, concurrent=-1))
-transcode_set = np.append(transcode_set, enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options2, concurrent=1, two_pass=True))
-transcode_set = np.append(transcode_set, enc.Transcode_setting("vvenc_transcode.py", ("../vvenc/bin/release-static/vvencFFapp", "../vvdec/bin/release-static/vvdecapp"), options3, concurrent=1, two_pass=False))
+transcode_set = {
+    "options": enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options),
+    "optionsd": enc.Transcode_setting("dummy_transcode.py", "/usr/bin/ffmpeg", options),
+    "options1": enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options1, concurrent=-1),
+    "options2": enc.Transcode_setting("ffmpeg_transcode.py", "/usr/bin/ffmpeg", options2, concurrent=1, two_pass=True),
+    "options3": enc.Transcode_setting("vvenc_transcode.py", ("../vvenc/bin/release-static/vvencFFapp", "../vvdec/bin/release-static/vvdecapp"), options3, concurrent=1, two_pass=False),
+    }
+
 # Dictionary for storing paths for binaries.
 binaries = {
     "ffprobe": "/usr/bin/ffprobe",
@@ -50,19 +61,19 @@ if os.name == "nt":
 inputfiles_list = ["Sintel.2010.720p_30s.mkv"]
 
 # Output directory for encoded videosequences
-outputpath = "out/"
-if os.path.isdir(outputpath) == 0:
-    os.mkdir(outputpath)
+outputpath = "out/test/"
+output_dir(outputpath)
 
 # Test configuration for errors before running encode
 #print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2]))
 #print(enc.transcode_check(binaries, inputfiles_list, transcode_set[2], "slow"))
 # Print used configuration.
-print(transcode_set[0]())
+print(transcode_set["options"]())
 print("\nencoding:\n")
 # Start the transcode.
-enc.transcode(binaries, inputfiles_list, transcode_set[0], outputpath)
-enc.transcode(binaries, inputfiles_list, transcode_set[0], outputpath, only_decode=True, append_useage_log=True)
-#enc.transcode(binaries, inputfiles_list, transcode_set[2], outputpath)
-enc.transcode(binaries, inputfiles_list, transcode_set[3], outputpath)
-enc.transcode(binaries, inputfiles_list, transcode_set[3], outputpath, only_decode=True, append_useage_log=True)
+#enc.transcode(binaries, inputfiles_list, transcode_set["options"], outputpath)
+enc.transcode(binaries, inputfiles_list, transcode_set["optionsd"], outputpath, check_if_exists=True, append_useage_log=True)
+#enc.transcode(binaries, inputfiles_list, transcode_set["options"], outputpath, only_decode=True, append_useage_log=True, decoder="h264")
+#enc.transcode(binaries, inputfiles_list, transcode_set["options2"], outputpath)
+#enc.transcode(binaries, inputfiles_list, transcode_set["options3"], outputpath)
+#enc.transcode(binaries, inputfiles_list, transcode_set["options3"], outputpath, only_decode=True, append_useage_log=True)
