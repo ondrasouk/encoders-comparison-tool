@@ -3,6 +3,7 @@ import time
 import threading
 import concurrent.futures as cf
 from importlib import util
+import pathlib
 import numpy as np
 import psutil
 import video_info
@@ -174,6 +175,13 @@ class Transcode_setting(object):
             )
         return True
 
+    def is_folder_sep(self) -> bool:
+        param_names, param_values = self.param_find()
+        for param in [self.options_flat()[x] for x in param_values]:
+            if param.separate:
+                return True
+        return False
+
 
 class sweep_param(object):
     """ Make callable sweep_param object, returns np.array with sweep values.
@@ -194,13 +202,14 @@ class sweep_param(object):
         'list': Only makes numpy array from python list.
     """
 
-    def __init__(self, mode, start, stop=None, n=None, prefix="", suffix=""):
+    def __init__(self, mode, start, stop=None, n=None, prefix="", suffix="", separate=False):
         self.mode = mode
         self.start = start
         self.stop = stop
         self.n = n
         self.prefix = str(prefix)
         self.suffix = str(suffix)
+        self.separate = separate
         if (mode != "list") & ((stop is None) | (n is None)):
             raise ValueError(
                 "Only for mode 'list' the stop and n can be empty.")
@@ -265,6 +274,20 @@ def count(n=0):
         n += 1
 
 
+def strip_forbidden_chars(string):
+    for ch in ['\\', '/', '|', '*', '"', '?', ':', '<', '>']:
+        # erase forbidden characters in file names
+        if ch in string:
+            string = string.replace(ch, "")
+    return string
+
+
+def create_dir(path):
+    if not os.path.isdir(path):
+        p = pathlib.Path(path)
+        p.mkdir(parents=True, exist_ok=True)
+
+
 # TODO
 # unused for now
 class inputfile_variants(object):
@@ -303,19 +326,42 @@ class inputfile_variants(object):
 
 
 class Transcode_job:
-    def __init__(self, transcode_set, job_id, mod, args, inputfile, outputfile, binaries, **kwargs):
+    def __init__(self, transcode_set, job_id, mod, args, inputfile, outputfolder, binaries, **kwargs):
         self.transcode_set = transcode_set
         self.binary = transcode_set.binary
         self.job_id = job_id
         self.mod = mod
         self.args = args
         self.inputfile = inputfile
+        self.filebasename = os.path.splitext(os.path.basename(inputfile))[0]
+        inputfiles_subfolders = kwargs.get("inputfiles_subfolders")
+        if inputfiles_subfolders is None:
+            self.subfolder_input = ""
+        else:
+            self.subfolder_input = inputfiles_subfolders[self.filebasename] + "/"
+        self.outputfolder = outputfolder
+        x = count()
+        param_names, param_pos = transcode_set.param_find()
+        if param_names == []:
+            outputfile = str(outputfolder + self.basename + ".mkv")
+        else:
+            param = ""
+            for opt in param_names:
+                param = param + opt + "_" + str(args[param_pos[next(x)]])
+            outputfile = strip_forbidden_chars(str(self.filebasename + param)) + ".mkv"
+            if transcode_set.is_folder_sep():
+                for param, value in [(args[x-1], args[x]) for x in param_pos if transcode_set.options_flat()[x].separate]:
+                    subfolder = strip_forbidden_chars(param + "_" + value).strip("-") + "/" + self.subfolder_input
+                    create_dir(outputfolder + subfolder)
+                    outputfile = str(outputfolder + subfolder + outputfile)
+            else:
+                outputfile = str(outputfolder + outputfile)
         self.outputfile = outputfile
+        self.basename = os.path.splitext(outputfile)[0]
         self.kwargs = kwargs
         self.measure_decode = kwargs.get("measure_decode")
         self.only_decode = kwargs.get("only_decode")
         self.append_useage_log = kwargs.get("append_useage_log")
-        # TODO add to ffmpeg
         if mod.OUTPUT_UNSUPORTED_BY_FFMPEG:
             self.encodedfile = os.path.splitext(outputfile)[0] + "." + mod.ENCODED_FILE_TYPE
         else:
@@ -339,7 +385,6 @@ class Transcode_job:
         self.cpu_useage = None
         self.mem_useage = None
         self.bias_time = 0
-        self.basename = os.path.splitext(outputfile)[0]
         self.useage_logfile = self.basename + "_useage.log"
         self.report = self.basename + ".report"  # verbose log or stdout record
         if not self.append_useage_log:
@@ -373,8 +418,7 @@ class Transcode_job:
 
 
 class PerpetualTimer:
-    """
-    Run code periodically in thread.
+    """ Run code periodically in thread.
     More info: https://stackoverflow.com/a/40965385
     """
 
@@ -456,25 +500,9 @@ def transcode(binaries_ent, videofiles, transcode_set, output_path, **kwargs):
         print(f"{video} framerate: {video_info.video_framerate(video)}")
         print(f"{video} calculated framecount: {video_info.video_frames(video)}")
 
-    param_name, param_value = transcode_set.param_find()
     global job_list
     for videofile, args in [[videofile, args] for videofile in videofiles for args in transcode_set()]:
-        filebasename = os.path.splitext(os.path.basename(videofile))[0]
-        param = ""
-        x = count()
-        if param_name == []:
-            outputfile = str(output_path + filebasename + ".mkv")
-        else:
-            for opt in param_name:
-                param = param + opt + "_" + str(
-                    args[param_value[next(x)]])
-            outputfile = str(filebasename + param)
-            for ch in ['\\', '/', '|', '*', '"', '?', ':', '<', '>']:
-                # erase forbidden characters in file names
-                if ch in outputfile:
-                    outputfile = outputfile.replace(ch, "")
-            outputfile = str(output_path + outputfile + ".mkv")
-        job_list.append(Transcode_job(transcode_set, len(job_list), mod, args, videofile, outputfile, binaries_ent, **kwargs))
+        job_list.append(Transcode_job(transcode_set, len(job_list), mod, args, videofile, output_path, binaries_ent, **kwargs))
 
     # TODO limit maximum number of workers by Transcode_job concurrency
     if not transcode_set.concurrent:
