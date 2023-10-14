@@ -1,16 +1,11 @@
 import os
 import subprocess
 import pickle
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy as sc
-import pathlib
-import threading
 import concurrent.futures as cf
-from scipy.signal import medfilt
-import csv
 import tikzplotlib
 import encoders_comparison_tool as enc
 import video_info as vi
