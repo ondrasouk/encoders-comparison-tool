@@ -1,4 +1,6 @@
 import numpy as np
+import numpy.typing as npt
+from typing import Optional
 import scipy
 # BD-Rate and BD-PNSR computation
 # (c) Joao Ascenso (joao.ascenso@lx.it.pt)
@@ -9,7 +11,8 @@ import scipy
 # bj_delta_akima)
 
 
-def bj_delta(R1, PSNR1, R2, PSNR2, mode=0, anchors=None):
+def bj_delta(R1: npt.ArrayLike, PSNR1: npt.ArrayLike, R2: npt.ArrayLike, PSNR2: npt.ArrayLike, mode: int = 0,
+             anchors: Optional[tuple[float, float]] = None) -> float:
     lR1 = np.log(R1)
     lR2 = np.log(R2)
 
@@ -62,11 +65,12 @@ def bj_delta(R1, PSNR1, R2, PSNR2, mode=0, anchors=None):
 
         # find avg diff between the areas to obtain the final measure
         avg_exp_diff = (int2-int1)/(max_int-min_int)
-        avg_diff = (np.exp(avg_exp_diff)-1)*100
+        avg_diff = (np.exp(avg_exp_diff)-1)*100  # in percent
     return avg_diff
 
 
-def bj_delta_akima(R1, PSNR1, R2, PSNR2, mode=0, anchors=None):
+def bj_delta_akima(R1: npt.ArrayLike, PSNR1: npt.ArrayLike, R2: npt.ArrayLike, PSNR2: npt.ArrayLike, mode: int = 0,
+                   anchors: Optional[tuple[float, float]] = None) -> float:
     lR1 = np.log(R1)
     lR2 = np.log(R2)
 
@@ -111,5 +115,5 @@ def bj_delta_akima(R1, PSNR1, R2, PSNR2, mode=0, anchors=None):
 
         # find avg diff between the areas to obtain the final measure
         avg_exp_diff = (int2-int1)/(max_int-min_int)
-        avg_diff = (np.exp(avg_exp_diff)-1)*100
+        avg_diff = (np.exp(avg_exp_diff)-1)*100  # in percent
     return avg_diff
